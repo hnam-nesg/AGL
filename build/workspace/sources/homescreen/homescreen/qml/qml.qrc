@@ -1,0 +1,21 @@
+<RCC>
+    <qresource prefix="/">
+        <file>background_with_panels.qml</file>
+        <file>TopBar.qml</file>
+        <file>ButtonControl.qml</file>
+        <file>BottomBar.qml</file>
+        <file>LeftBar.qml</file>
+        <file>Background.qml</file>
+        <file>StartupSplash.qml</file>
+        <file>BorderColor.qml</file>
+        <file>HomeScreen.qml</file>
+        <file>Mercedes.qml</file>
+        <file>LeaderCallout.qml</file>
+        <file>MediaAreaMusic.qml</file>
+        <file>AreaMap.qml</file>
+        <file>HomeMap3DSurface.qml</file>
+        <file>home-map-3d.html</file>
+        <file alias="maplibre-gl.js">../../../navigation/qml/maplibre-gl.js</file>
+        <file alias="maplibre-gl.css">../../../navigation/qml/maplibre-gl.css</file>
+    </qresource>
+</RCC>

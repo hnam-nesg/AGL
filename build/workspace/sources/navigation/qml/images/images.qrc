@@ -1,0 +1,12 @@
+<RCC>
+    <qresource prefix="/images">
+        <file>icons8-arrow-up-94.png</file>
+        <file>icons8-my-location-48.png</file>
+        <file>icons8-plus-48.png</file>
+        <file>icons8-redo-94.png</file>
+        <file>icons8-search-48.png</file>
+        <file>icons8-subtract-48.png</file>
+        <file>icons8-undo-94.png</file>
+        <file>Roboto-BoldCondensed.ttf</file>
+    </qresource>
+</RCC>

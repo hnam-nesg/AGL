@@ -1,0 +1,1433 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="qrc:/maplibre-gl.css">
+
+    <style>
+        html,
+        body,
+        #map {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #030812;
+        }
+
+        .maplibregl-ctrl-logo,
+        .maplibregl-ctrl-attrib {
+            display: none !important;
+        }
+
+        #vignette {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 50% 20%, rgba(69, 134, 157, 0.18), transparent 34%),
+                linear-gradient(180deg, rgba(2, 6, 14, 0.08), rgba(2, 6, 14, 0.55) 58%, rgba(0, 2, 8, 0.92)),
+                linear-gradient(90deg, rgba(0, 0, 0, 0.34), transparent 30%, transparent 70%, rgba(0, 0, 0, 0.34));
+            mix-blend-mode: normal;
+            opacity: 0.82;
+        }
+
+        .maplibregl-canvas {
+            background: #020611;
+        }
+
+        @keyframes homeRouteAlarmPulse {
+            0% {
+                transform: translate(-50%, -50%) scale(0.10);
+                opacity: 0.98;
+                filter: blur(0);
+            }
+            45% {
+                opacity: 0.46;
+                filter: blur(1.6px);
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(4.75);
+                opacity: 0;
+                filter: blur(7px);
+            }
+        }
+
+        @keyframes homeRouteCoreBeat {
+            0%,
+            100% {
+                transform: scale(1);
+            }
+            42% {
+                transform: scale(1.08);
+            }
+        }
+
+        .home-route-alarm-marker {
+            position: relative;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: transparent;
+            border: 0;
+            overflow: visible;
+            isolation: isolate;
+            box-shadow:
+                0 10px 22px rgba(0, 0, 0, 0.62),
+                0 16px 28px rgba(0, 0, 0, 0.38),
+                0 0 34px rgba(185, 28, 28, 0.92),
+                0 0 72px rgba(127, 16, 24, 0.72);
+        }
+
+        .home-marker-ripple {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background:
+                radial-gradient(circle,
+                    rgba(255, 196, 196, 0.58) 0%,
+                    rgba(220, 38, 38, 0.44) 24%,
+                    rgba(127, 16, 24, 0.30) 52%,
+                    rgba(127, 16, 24, 0.00) 82%);
+            transform: translate(-50%, -50%) scale(0.10);
+            animation: homeRouteAlarmPulse 1.65s ease-out infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .home-marker-ripple.ripple-2 {
+            width: 62px;
+            height: 62px;
+            animation-delay: 0.42s;
+            background:
+                radial-gradient(circle,
+                    rgba(248, 113, 113, 0.48) 0%,
+                    rgba(185, 28, 28, 0.32) 30%,
+                    rgba(127, 16, 24, 0.18) 58%,
+                    rgba(127, 16, 24, 0.00) 86%);
+        }
+
+        .home-marker-ripple.ripple-3 {
+            width: 86px;
+            height: 86px;
+            animation-delay: 0.84s;
+            background:
+                radial-gradient(circle,
+                    rgba(220, 38, 38, 0.34) 0%,
+                    rgba(127, 16, 24, 0.24) 38%,
+                    rgba(127, 16, 24, 0.10) 68%,
+                    rgba(127, 16, 24, 0.00) 90%);
+        }
+
+        .home-marker-core {
+            width: 100%;
+            height: 100%;
+            border-radius: inherit;
+            background:
+                radial-gradient(circle at 34% 24%, rgba(255, 214, 214, 0.96) 0%, rgba(255, 160, 160, 0.72) 12%, rgba(255, 160, 160, 0.0) 27%),
+                radial-gradient(circle at 62% 70%, #4f0309 0%, #6f0710 36%, #99121e 64%, #c61f2e 100%);
+            position: relative;
+            z-index: 1;
+            box-shadow:
+                inset -7px -9px 12px rgba(40, 0, 4, 0.72),
+                inset 5px 4px 8px rgba(255, 205, 205, 0.30),
+                0 5px 10px rgba(0, 0, 0, 0.46),
+                0 0 26px rgba(220, 38, 38, 0.86);
+            animation: homeRouteCoreBeat 1.95s ease-in-out infinite;
+        }
+
+        #debug {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="vignette"></div>
+    <div id="debug">Home 3D map loading</div>
+
+    <script src="qrc:/maplibre-gl.js"></script>
+
+    <script>
+        console.log("HOME_MAP_3D_VERSION_2026_05_12_DARK_GOONG");
+
+        const DEFAULT_CENTER = [106.70290, 10.80690];
+        const DEFAULT_GOONG_STYLE_URL = "https://tiles.goong.io/assets/goong_map_web.json";
+        const DEFAULT_GOONG_BUILDING_LAYER = "VN_Building";
+        const EMPTY_ROUTE = {
+            type: "Feature",
+            geometry: {
+                type: "LineString",
+                coordinates: []
+            },
+            properties: {}
+        };
+
+        const BLANK_DARK_STYLE = {
+            version: 8,
+            sources: {},
+            layers: [{
+                id: "home-blank-background",
+                type: "background",
+                paint: {
+                    "background-color": "#030812"
+                }
+            }]
+        };
+
+        const DARK_MAP_PALETTE = {
+            background: "#020611",
+            land: "#06101d",
+            landAlt: "#081827",
+            water: "#031827",
+            green: "#0a221b",
+            buildingBase: "#142033",
+            boundary: "#163149",
+            minorRoad: "#1a3346",
+            majorRoad: "#2d5368",
+            roadCasing: "#030914",
+            label: "#d8e8ef",
+            labelHalo: "#020611",
+            accent: "#49c9f5"
+        };
+
+        let currentMarker = null;
+        let destinationMarker = null;
+        let lastPayload = null;
+        let providerStyleApplied = false;
+        let map3dActive = true;
+        let refreshTimer = null;
+        let cameraLogTimer = null;
+        let goongMapTilesKey = "";
+        let goongStyleUrl = DEFAULT_GOONG_STYLE_URL;
+        let configuredBuildingLayer = DEFAULT_GOONG_BUILDING_LAYER;
+        let providerStyleLoadTimer = null;
+        let providerStyleRetryCount = 0;
+        let providerStyleUrl = "";
+        let providerStyleLoadToken = 0;
+
+        const ROUTE_SOURCE_ID = "home-navigation-route";
+        const ROUTE_CASING_LAYER_ID = "home-navigation-route-casing";
+        const ROUTE_LINE_LAYER_ID = "home-navigation-route-line";
+        const SUPPLEMENTAL_SOURCE_ID = "home-rendered-footprint-source";
+        const SUPPLEMENTAL_LAYER_ID = "home-rendered-footprint-3d";
+        const LANDMARK_SOURCE_ID = "home-landmark81-source";
+        const LANDMARK_LAYER_ID = "home-landmark81-3d";
+        const LANDMARK_81_HEIGHT = 461.2;
+        const LANDMARK_81_BOUNDS = {
+            west: 106.72055,
+            south: 10.79405,
+            east: 106.72285,
+            north: 10.79645
+        };
+
+        function setDebug(text) {
+            const el = document.getElementById("debug");
+            if (el)
+                el.textContent = text;
+            console.log("HOME_MAP_DEBUG=" + text);
+        }
+
+        function pointFeature(point) {
+            if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lon))
+                return null;
+
+            return [point.lon, point.lat];
+        }
+
+        function safeStringifyError(err) {
+            if (!err)
+                return "unknown error";
+
+            try {
+                return JSON.stringify({
+                    message: err.message ? err.message : String(err),
+                    status: err.status,
+                    statusText: err.statusText,
+                    url: err.url
+                });
+            } catch (e) {
+                return String(err);
+            }
+        }
+
+        function styleUrlWithKey() {
+            const base = goongStyleUrl || DEFAULT_GOONG_STYLE_URL;
+
+            if (!goongMapTilesKey || base.indexOf("api_key=") !== -1 || base.indexOf("access_token=") !== -1)
+                return base;
+
+            const separator = base.indexOf("?") === -1 ? "?" : "&";
+            return base + separator + "api_key=" + encodeURIComponent(goongMapTilesKey);
+        }
+
+        function buildStyleUrl() {
+            if (!goongMapTilesKey && (goongStyleUrl || DEFAULT_GOONG_STYLE_URL).indexOf("api_key=") === -1)
+                console.warn("HOME_GOONG_MAPTILES_KEY_MISSING");
+
+            return styleUrlWithKey();
+        }
+
+        function absoluteStyleResourceUrl(value, baseUrl) {
+            if (!value || typeof value !== "string")
+                return value;
+
+            if (/^(https?:|data:|blob:|qrc:|file:|mapbox:)/i.test(value))
+                return value;
+
+            try {
+                return new URL(value, baseUrl).toString();
+            } catch (e) {
+                return value;
+            }
+        }
+
+        function setStylePaint(layer, property, value) {
+            if (!layer)
+                return;
+
+            if (!layer.paint)
+                layer.paint = {};
+            layer.paint[property] = value;
+        }
+
+        function applyDarkPaintToStyleLayer(layer) {
+            if (!layer || !layer.id)
+                return;
+
+            if (layer.type === "background") {
+                setStylePaint(layer, "background-color", DARK_MAP_PALETTE.background);
+                return;
+            }
+
+            if (layer.type === "fill") {
+                if (isWaterLayer(layer))
+                    setStylePaint(layer, "fill-color", DARK_MAP_PALETTE.water);
+                else if (isGreenLayer(layer))
+                    setStylePaint(layer, "fill-color", DARK_MAP_PALETTE.green);
+                else if (isBuildingLayer(layer))
+                    setStylePaint(layer, "fill-color", DARK_MAP_PALETTE.buildingBase);
+                else
+                    setStylePaint(layer, "fill-color", DARK_MAP_PALETTE.land);
+
+                setStylePaint(layer, "fill-opacity", 0.96);
+                setStylePaint(layer, "fill-outline-color", DARK_MAP_PALETTE.boundary);
+                return;
+            }
+
+            if (layer.type === "line") {
+                if (isRoadLayer(layer))
+                    setStylePaint(layer, "line-color", isMajorRoadLayer(layer) ? DARK_MAP_PALETTE.majorRoad : DARK_MAP_PALETTE.minorRoad);
+                else if (isBoundaryLayer(layer))
+                    setStylePaint(layer, "line-color", DARK_MAP_PALETTE.boundary);
+                else
+                    setStylePaint(layer, "line-color", "#10243a");
+
+                setStylePaint(layer, "line-opacity", isRoadLayer(layer) ? 0.9 : 0.56);
+                return;
+            }
+
+            if (layer.type === "symbol") {
+                setStylePaint(layer, "text-color", DARK_MAP_PALETTE.label);
+                setStylePaint(layer, "text-halo-color", DARK_MAP_PALETTE.labelHalo);
+                setStylePaint(layer, "text-halo-width", 1.55);
+                setStylePaint(layer, "text-halo-blur", 0.35);
+                setStylePaint(layer, "icon-color", DARK_MAP_PALETTE.label);
+                setStylePaint(layer, "icon-halo-color", DARK_MAP_PALETTE.labelHalo);
+                setStylePaint(layer, "icon-halo-width", 1.0);
+                setStylePaint(layer, "icon-opacity", 0.76);
+                setStylePaint(layer, "text-opacity", 0.94);
+                return;
+            }
+
+            if (layer.type === "circle") {
+                setStylePaint(layer, "circle-color", DARK_MAP_PALETTE.accent);
+                setStylePaint(layer, "circle-opacity", 0.72);
+                return;
+            }
+
+            if (layer.type === "raster") {
+                setStylePaint(layer, "raster-brightness-min", 0.0);
+                setStylePaint(layer, "raster-brightness-max", 0.28);
+                setStylePaint(layer, "raster-saturation", -0.75);
+                setStylePaint(layer, "raster-contrast", 0.34);
+                setStylePaint(layer, "raster-opacity", 0.94);
+                return;
+            }
+
+            if (layer.type === "hillshade") {
+                setStylePaint(layer, "hillshade-shadow-color", "#01050d");
+                setStylePaint(layer, "hillshade-highlight-color", "#1a3448");
+                setStylePaint(layer, "hillshade-accent-color", "#071b2c");
+                setStylePaint(layer, "hillshade-exaggeration", 0.42);
+                return;
+            }
+
+            if (layer.type === "fill-extrusion") {
+                const paint = extrusionPaint(0.92);
+                Object.keys(paint).forEach(function (property) {
+                    setStylePaint(layer, property, paint[property]);
+                });
+            }
+        }
+
+        function normalizeProviderStyleUrls(style, baseUrl) {
+            if (!style || !baseUrl)
+                return;
+
+            style.sprite = absoluteStyleResourceUrl(style.sprite, baseUrl);
+            style.glyphs = absoluteStyleResourceUrl(style.glyphs, baseUrl);
+
+            const sources = style.sources || {};
+            Object.keys(sources).forEach(function (sourceId) {
+                const source = sources[sourceId];
+                if (!source)
+                    return;
+
+                source.url = absoluteStyleResourceUrl(source.url, baseUrl);
+                if (Array.isArray(source.tiles)) {
+                    source.tiles = source.tiles.map(function (tileUrl) {
+                        return absoluteStyleResourceUrl(tileUrl, baseUrl);
+                    });
+                }
+            });
+        }
+
+        function darkenProviderStyle(providerStyle, baseUrl) {
+            const style = JSON.parse(JSON.stringify(providerStyle || {}));
+            style.version = style.version || 8;
+            style.name = "AGL Homescreen Dark Goong";
+            style.sources = style.sources || {};
+            style.layers = Array.isArray(style.layers) ? style.layers : [];
+            style.metadata = Object.assign({}, style.metadata || {}, {
+                "agl:dark-style": true,
+                "agl:dark-style-source": "goong"
+            });
+            style.light = {
+                anchor: "viewport",
+                color: "#cbe9f4",
+                intensity: 0.46,
+                position: [1.4, 150, 48]
+            };
+
+            normalizeProviderStyleUrls(style, baseUrl);
+
+            if (!style.layers.some(function (layer) { return layer && layer.type === "background"; })) {
+                style.layers.unshift({
+                    id: "home-dark-background",
+                    type: "background",
+                    paint: {
+                        "background-color": DARK_MAP_PALETTE.background
+                    }
+                });
+            }
+
+            for (let i = 0; i < style.layers.length; ++i)
+                applyDarkPaintToStyleLayer(style.layers[i]);
+
+            return style;
+        }
+
+        function providerStyleBaseUrl() {
+            return String(goongStyleUrl || DEFAULT_GOONG_STYLE_URL).split("?")[0];
+        }
+
+        function isProviderStyleError(err) {
+            const url = String((err && err.url) || "");
+            const message = String((err && err.message) || err || "");
+            const baseUrl = providerStyleBaseUrl();
+            return url.indexOf(baseUrl) !== -1
+                    || message.indexOf(baseUrl) !== -1
+                    || url.indexOf("goong_map_web.json") !== -1
+                    || message.indexOf("goong_map_web.json") !== -1;
+        }
+
+        function loadProviderStyle(reason) {
+            window.clearTimeout(providerStyleLoadTimer);
+            providerStyleUrl = buildStyleUrl();
+            providerStyleApplied = true;
+            const requestUrl = providerStyleUrl;
+            const token = ++providerStyleLoadToken;
+            console.warn("HOME_MAP_STYLE_LOAD", reason, providerStyleUrl);
+
+            fetch(requestUrl, {
+                headers: {
+                    "Accept": "application/json"
+                },
+                cache: "no-store"
+            }).then(function (response) {
+                if (!response.ok)
+                    throw {
+                        message: "Goong style HTTP " + response.status,
+                        status: response.status,
+                        statusText: response.statusText,
+                        url: requestUrl
+                    };
+                return response.json();
+            }).then(function (style) {
+                if (token !== providerStyleLoadToken || requestUrl !== providerStyleUrl)
+                    return;
+
+                console.warn("HOME_MAP_STYLE_DARK_OBJECT_READY", requestUrl);
+                map.setStyle(darkenProviderStyle(style, requestUrl));
+            }).catch(function (err) {
+                if (token !== providerStyleLoadToken)
+                    return;
+
+                console.warn("HOME_MAP_STYLE_DARK_FETCH_FAILED", safeStringifyError(err));
+                map.setStyle(requestUrl);
+            });
+        }
+
+        function scheduleProviderStyleRetry(reason) {
+            if (!providerStyleApplied)
+                return;
+
+            window.clearTimeout(providerStyleLoadTimer);
+            const delays = [1200, 2500, 5000, 10000, 20000, 30000, 45000, 60000];
+            const delay = delays[Math.min(providerStyleRetryCount, delays.length - 1)];
+            providerStyleRetryCount += 1;
+
+            console.warn("HOME_MAP_STYLE_RETRY_SCHEDULED", reason, delay);
+            providerStyleLoadTimer = window.setTimeout(function () {
+                loadProviderStyle("retry:" + reason);
+            }, delay);
+        }
+
+        const map = new maplibregl.Map({
+            container: "map",
+            style: BLANK_DARK_STYLE,
+            center: DEFAULT_CENTER,
+            zoom: 13.2,
+            pitch: 48,
+            minPitch: 0,
+            maxPitch: 80,
+            bearing: -12,
+            antialias: true,
+            attributionControl: false,
+            interactive: false
+        });
+
+        function sendCameraToQml() {
+            window.clearTimeout(cameraLogTimer);
+            cameraLogTimer = window.setTimeout(function () {
+                const center = map.getCenter();
+                console.log("HOME_MAP_CAMERA=" + JSON.stringify({
+                    lat: center.lat,
+                    lon: center.lng,
+                    zoom: map.getZoom(),
+                    pitch: map.getPitch(),
+                    bearing: map.getBearing()
+                }));
+            }, 50);
+        }
+
+        map.on("moveend", sendCameraToQml);
+        map.on("zoomend", sendCameraToQml);
+        map.on("rotateend", sendCameraToQml);
+        map.on("pitchend", sendCameraToQml);
+        map.on("idle", scheduleSupplementalRefresh);
+        map.on("moveend", scheduleSupplementalRefresh);
+        map.on("zoomend", scheduleSupplementalRefresh);
+
+        function resizeMapSoon() {
+            [0, 120, 500, 1200].forEach(function (delay) {
+                window.setTimeout(function () {
+                    try {
+                        map.resize();
+                    } catch (e) {
+                        console.warn("HOME_MAP_RESIZE_FAILED", e);
+                    }
+                }, delay);
+            });
+        }
+
+        window.addEventListener("resize", resizeMapSoon);
+        resizeMapSoon();
+
+        function trySetPaint(layerId, property, value) {
+            try {
+                if (map.getLayer(layerId))
+                    map.setPaintProperty(layerId, property, value);
+            } catch (e) {
+                // Goong styles contain mixed layer types; unsupported paint keys are expected.
+            }
+        }
+
+        function layerText(layer) {
+            return String((layer && layer.id) || "") + " "
+                    + String((layer && layer["source-layer"]) || "") + " "
+                    + String((layer && layer.source) || "");
+        }
+
+        function isWaterLayer(layer) {
+            return /(water|river|lake|ocean|sea)/i.test(layerText(layer));
+        }
+
+        function isGreenLayer(layer) {
+            return /(park|landuse|wood|forest|grass|green|garden)/i.test(layerText(layer));
+        }
+
+        function isRoadLayer(layer) {
+            return /(road|street|motorway|highway|bridge|tunnel)/i.test(layerText(layer));
+        }
+
+        function isBuildingLayer(layer) {
+            return /(building|footprint|house|bldg|vn_building)/i.test(layerText(layer));
+        }
+
+        function isMajorRoadLayer(layer) {
+            return /(motorway|trunk|primary|secondary|highway|major|bridge)/i.test(layerText(layer));
+        }
+
+        function isBoundaryLayer(layer) {
+            return /(boundary|admin|border|province|district)/i.test(layerText(layer));
+        }
+
+        function applyDarkPaintToLayer(layer) {
+            if (!layer || !layer.id)
+                return;
+
+            if (layer.type === "background") {
+                trySetPaint(layer.id, "background-color", DARK_MAP_PALETTE.background);
+                return;
+            }
+
+            if (layer.type === "fill") {
+                if (isWaterLayer(layer))
+                    trySetPaint(layer.id, "fill-color", DARK_MAP_PALETTE.water);
+                else if (isGreenLayer(layer))
+                    trySetPaint(layer.id, "fill-color", DARK_MAP_PALETTE.green);
+                else if (isBuildingLayer(layer))
+                    trySetPaint(layer.id, "fill-color", DARK_MAP_PALETTE.buildingBase);
+                else
+                    trySetPaint(layer.id, "fill-color", DARK_MAP_PALETTE.land);
+
+                trySetPaint(layer.id, "fill-opacity", 0.94);
+                trySetPaint(layer.id, "fill-outline-color", DARK_MAP_PALETTE.boundary);
+                return;
+            }
+
+            if (layer.type === "line") {
+                if (isRoadLayer(layer))
+                    trySetPaint(layer.id, "line-color", isMajorRoadLayer(layer) ? DARK_MAP_PALETTE.majorRoad : DARK_MAP_PALETTE.minorRoad);
+                else if (isBoundaryLayer(layer))
+                    trySetPaint(layer.id, "line-color", DARK_MAP_PALETTE.boundary);
+                else
+                    trySetPaint(layer.id, "line-color", "#10243a");
+
+                trySetPaint(layer.id, "line-opacity", isRoadLayer(layer) ? 0.88 : 0.54);
+                return;
+            }
+
+            if (layer.type === "symbol") {
+                trySetPaint(layer.id, "text-color", DARK_MAP_PALETTE.label);
+                trySetPaint(layer.id, "text-halo-color", DARK_MAP_PALETTE.labelHalo);
+                trySetPaint(layer.id, "text-halo-width", 1.55);
+                trySetPaint(layer.id, "text-halo-blur", 0.35);
+                trySetPaint(layer.id, "icon-color", DARK_MAP_PALETTE.label);
+                trySetPaint(layer.id, "icon-halo-color", DARK_MAP_PALETTE.labelHalo);
+                trySetPaint(layer.id, "icon-halo-width", 1.0);
+                trySetPaint(layer.id, "icon-opacity", 0.74);
+                trySetPaint(layer.id, "text-opacity", 0.94);
+                return;
+            }
+
+            if (layer.type === "circle") {
+                trySetPaint(layer.id, "circle-color", DARK_MAP_PALETTE.accent);
+                trySetPaint(layer.id, "circle-opacity", 0.70);
+                return;
+            }
+
+            if (layer.type === "raster") {
+                trySetPaint(layer.id, "raster-brightness-min", 0.0);
+                trySetPaint(layer.id, "raster-brightness-max", 0.32);
+                trySetPaint(layer.id, "raster-saturation", -0.62);
+                trySetPaint(layer.id, "raster-contrast", 0.24);
+                trySetPaint(layer.id, "raster-opacity", 0.92);
+                return;
+            }
+
+            if (layer.type === "hillshade") {
+                trySetPaint(layer.id, "hillshade-shadow-color", "#01050d");
+                trySetPaint(layer.id, "hillshade-highlight-color", "#1a3448");
+                trySetPaint(layer.id, "hillshade-accent-color", "#071b2c");
+                trySetPaint(layer.id, "hillshade-exaggeration", 0.42);
+                return;
+            }
+
+            if (layer.type === "fill-extrusion") {
+                const paint = extrusionPaint(0.92);
+                Object.keys(paint).forEach(function (property) {
+                    trySetPaint(layer.id, property, paint[property]);
+                });
+            }
+        }
+
+        function applyDarkMapColors() {
+            if (!map.isStyleLoaded())
+                return;
+
+            const style = map.getStyle();
+            const layers = style && style.layers ? style.layers : [];
+            for (let i = 0; i < layers.length; ++i)
+                applyDarkPaintToLayer(layers[i]);
+
+            try {
+                map.setLight({
+                    anchor: "viewport",
+                    color: "#cbe9f4",
+                    intensity: 0.46,
+                    position: [1.4, 150, 48]
+                });
+            } catch (e) {
+                console.warn("HOME_MAP_LIGHT_FAILED", safeStringifyError(e));
+            }
+        }
+
+        function heightExpression(fallbackHeight) {
+            return [
+                "case",
+                ["has", "__height"], ["to-number", ["get", "__height"], fallbackHeight],
+                ["has", "height"], ["to-number", ["get", "height"], fallbackHeight],
+                ["has", "render_height"], ["to-number", ["get", "render_height"], fallbackHeight],
+                ["has", "min_height"], ["to-number", ["get", "min_height"], fallbackHeight],
+                ["has", "levels"], ["*", ["to-number", ["get", "levels"], 5], 3.2],
+                ["has", "building:levels"], ["*", ["to-number", ["get", "building:levels"], 5], 3.2],
+                fallbackHeight
+            ];
+        }
+
+        function extrusionPaint(opacity) {
+            const h = heightExpression(22);
+            return {
+                "fill-extrusion-color": [
+                    "interpolate", ["linear"], h,
+                    0, "#1a2635",
+                    24, "#24374a",
+                    80, "#355269",
+                    180, "#4f6f83",
+                    360, "#7793a2"
+                ],
+                "fill-extrusion-height": h,
+                "fill-extrusion-base": ["to-number", ["get", "base"], 0],
+                "fill-extrusion-opacity": opacity,
+                "fill-extrusion-vertical-gradient": true
+            };
+        }
+
+        function firstSymbolLayerId() {
+            const layers = (map.getStyle() && map.getStyle().layers) || [];
+            for (let i = 0; i < layers.length; ++i) {
+                if (layers[i].type === "symbol")
+                    return layers[i].id;
+            }
+            return undefined;
+        }
+
+        function sanitizeLayerId(value) {
+            return String(value || "layer").replace(/[^A-Za-z0-9_-]+/g, "-");
+        }
+
+        function buildingCandidates() {
+            const style = map.getStyle();
+            const layers = style && style.layers ? style.layers : [];
+            const sources = style && style.sources ? style.sources : {};
+            const seen = {};
+            const candidates = [];
+
+            function push(source, sourceLayer) {
+                if (!source || !sourceLayer)
+                    return;
+
+                const key = source + "|" + sourceLayer;
+                if (seen[key])
+                    return;
+
+                seen[key] = true;
+                candidates.push({
+                    source: source,
+                    sourceLayer: sourceLayer
+                });
+            }
+
+            push(firstVectorSourceId(sources), configuredBuildingLayer);
+
+            for (let i = 0; i < layers.length; ++i) {
+                const layer = layers[i];
+                if (isBuildingLayer(layer))
+                    push(layer.source, layer["source-layer"]);
+            }
+
+            return candidates;
+        }
+
+        function firstVectorSourceId(sources) {
+            const ids = Object.keys(sources || {});
+            for (let i = 0; i < ids.length; ++i) {
+                if (sources[ids[i]] && sources[ids[i]].type === "vector")
+                    return ids[i];
+            }
+            return "";
+        }
+
+        function ensureBuildingExtrusions() {
+            if (!map.isStyleLoaded() || !map3dActive)
+                return;
+
+            const beforeId = firstSymbolLayerId();
+            const candidates = buildingCandidates();
+            for (let i = 0; i < candidates.length; ++i) {
+                const candidate = candidates[i];
+                const layerId = "home-building-3d-" + sanitizeLayerId(candidate.source) + "-" + sanitizeLayerId(candidate.sourceLayer);
+
+                if (map.getLayer(layerId)) {
+                    trySetPaint(layerId, "fill-extrusion-opacity", 0.94);
+                    continue;
+                }
+
+                try {
+                    map.addLayer({
+                        id: layerId,
+                        type: "fill-extrusion",
+                        source: candidate.source,
+                        "source-layer": candidate.sourceLayer,
+                        minzoom: 13,
+                        paint: extrusionPaint(0.94)
+                    }, beforeId);
+                    console.log("HOME_MAP_3D_BUILDING_LAYER=" + layerId);
+                } catch (e) {
+                    console.warn("HOME_MAP_3D_BUILDING_LAYER_FAILED", layerId, safeStringifyError(e));
+                }
+            }
+        }
+
+        function emptyFeatureCollection() {
+            return {
+                type: "FeatureCollection",
+                features: []
+            };
+        }
+
+        function ensureSupplementalBuildings() {
+            if (!map.isStyleLoaded())
+                return;
+
+            if (!map.getSource(SUPPLEMENTAL_SOURCE_ID)) {
+                map.addSource(SUPPLEMENTAL_SOURCE_ID, {
+                    type: "geojson",
+                    data: emptyFeatureCollection()
+                });
+            }
+
+            if (!map.getLayer(SUPPLEMENTAL_LAYER_ID)) {
+                try {
+                    map.addLayer({
+                        id: SUPPLEMENTAL_LAYER_ID,
+                        type: "fill-extrusion",
+                        source: SUPPLEMENTAL_SOURCE_ID,
+                        minzoom: 13,
+                        paint: extrusionPaint(0.90)
+                    }, firstSymbolLayerId());
+                } catch (e) {
+                    console.warn("HOME_MAP_SUPPLEMENTAL_LAYER_FAILED", safeStringifyError(e));
+                }
+            }
+        }
+
+        function parseMetric(value) {
+            if (value === undefined || value === null)
+                return NaN;
+
+            if (typeof value === "number")
+                return value;
+
+            const match = String(value).replace(",", ".").match(/-?\d+(\.\d+)?/);
+            return match ? Number(match[0]) : NaN;
+        }
+
+        function normalizedHeight(properties, index) {
+            const p = properties || {};
+            const rawHeight = parseMetric(p.height || p.render_height || p.__height);
+            if (Number.isFinite(rawHeight) && rawHeight > 0)
+                return Math.max(8, Math.min(rawHeight, 480));
+
+            const levels = parseMetric(p.levels || p["building:levels"] || p.floor || p.floors);
+            if (Number.isFinite(levels) && levels > 0)
+                return Math.max(8, Math.min(levels * 3.2, 360));
+
+            return 18 + (index % 7) * 4;
+        }
+
+        function coordinateTouchesLandmarkBounds(coord) {
+            return Array.isArray(coord)
+                    && coord.length >= 2
+                    && coord[0] >= LANDMARK_81_BOUNDS.west
+                    && coord[0] <= LANDMARK_81_BOUNDS.east
+                    && coord[1] >= LANDMARK_81_BOUNDS.south
+                    && coord[1] <= LANDMARK_81_BOUNDS.north;
+        }
+
+        function coordinatesTouchLandmarkBounds(coords) {
+            if (!Array.isArray(coords))
+                return false;
+
+            if (typeof coords[0] === "number")
+                return coordinateTouchesLandmarkBounds(coords);
+
+            for (let i = 0; i < coords.length; ++i) {
+                if (coordinatesTouchLandmarkBounds(coords[i]))
+                    return true;
+            }
+
+            return false;
+        }
+
+        function geometryTouchesLandmarkBounds(geometry) {
+            return geometry && coordinatesTouchLandmarkBounds(geometry.coordinates);
+        }
+
+        function ringArea(ring) {
+            if (!Array.isArray(ring) || ring.length < 3)
+                return 0;
+
+            let area = 0;
+            for (let i = 0; i < ring.length; ++i) {
+                const a = ring[i];
+                const b = ring[(i + 1) % ring.length];
+                if (!Array.isArray(a) || !Array.isArray(b))
+                    continue;
+                area += (a[0] * b[1]) - (b[0] * a[1]);
+            }
+            return Math.abs(area) * 0.5;
+        }
+
+        function geometryArea(geometry) {
+            if (!geometry || !Array.isArray(geometry.coordinates))
+                return 0;
+
+            if (geometry.type === "Polygon")
+                return ringArea(geometry.coordinates[0]);
+
+            if (geometry.type === "MultiPolygon") {
+                let area = 0;
+                for (let i = 0; i < geometry.coordinates.length; ++i)
+                    area += ringArea(geometry.coordinates[i][0]);
+                return area;
+            }
+
+            return 0;
+        }
+
+        function landmarkScore(feature) {
+            if (!feature || !feature.geometry || !/Polygon/.test(feature.geometry.type))
+                return -1;
+            if (!geometryTouchesLandmarkBounds(feature.geometry))
+                return -1;
+
+            const props = feature.properties || {};
+            const label = String(props.name || props.Name || props.NAME || props.display_name || "").toLowerCase();
+            const nameBonus = /(landmark|vinhomes|central park|81)/i.test(label) ? 1000 : 0;
+            return nameBonus + geometryArea(feature.geometry);
+        }
+
+        function landmarkFeatureFromRendered() {
+            const layerIds = discoverRenderedFootprintLayerIds();
+            if (!layerIds.length)
+                return null;
+
+            try {
+                const nw = map.project([LANDMARK_81_BOUNDS.west, LANDMARK_81_BOUNDS.north]);
+                const se = map.project([LANDMARK_81_BOUNDS.east, LANDMARK_81_BOUNDS.south]);
+                const canvas = map.getCanvas();
+                const width = Math.max(1, canvas.clientWidth || canvas.width || 1);
+                const height = Math.max(1, canvas.clientHeight || canvas.height || 1);
+                const minX = Math.max(0, Math.min(width, Math.min(nw.x, se.x)));
+                const maxX = Math.max(0, Math.min(width, Math.max(nw.x, se.x)));
+                const minY = Math.max(0, Math.min(height, Math.min(nw.y, se.y)));
+                const maxY = Math.max(0, Math.min(height, Math.max(nw.y, se.y)));
+                if (maxX <= minX || maxY <= minY)
+                    return null;
+
+                const features = map.queryRenderedFeatures([[minX, minY], [maxX, maxY]], {
+                    layers: layerIds
+                });
+                return bestLandmarkFeature(features);
+            } catch (e) {
+                console.warn("HOME_MAP_LANDMARK_RENDERED_QUERY_FAILED", safeStringifyError(e));
+                return null;
+            }
+        }
+
+        function landmarkFeatureFromSource() {
+            const candidates = buildingCandidates();
+            let best = null;
+            let bestScore = -1;
+
+            for (let i = 0; i < candidates.length; ++i) {
+                const candidate = candidates[i];
+                try {
+                    const features = map.querySourceFeatures(candidate.source, {
+                        sourceLayer: candidate.sourceLayer
+                    });
+                    const feature = bestLandmarkFeature(features);
+                    const score = landmarkScore(feature);
+                    if (score > bestScore) {
+                        best = feature;
+                        bestScore = score;
+                    }
+                } catch (e) {
+                    console.warn("HOME_MAP_LANDMARK_SOURCE_QUERY_FAILED", safeStringifyError(e));
+                }
+            }
+
+            return best;
+        }
+
+        function bestLandmarkFeature(features) {
+            let best = null;
+            let bestScore = -1;
+            for (let i = 0; i < (features || []).length; ++i) {
+                const score = landmarkScore(features[i]);
+                if (score > bestScore) {
+                    best = features[i];
+                    bestScore = score;
+                }
+            }
+            return bestScore >= 0 ? best : null;
+        }
+
+        function correctedLandmarkFeature(feature) {
+            const properties = Object.assign({}, feature && feature.properties ? feature.properties : {});
+            properties.__landmark81 = true;
+            properties.__height = LANDMARK_81_HEIGHT;
+            properties.height = LANDMARK_81_HEIGHT;
+            properties.render_height = LANDMARK_81_HEIGHT;
+            properties.base = 0;
+
+            return {
+                type: "Feature",
+                properties: properties,
+                geometry: feature.geometry
+            };
+        }
+
+        function fallbackLandmark81Feature() {
+            return correctedLandmarkFeature({
+                geometry: {
+                    type: "Polygon",
+                    coordinates: [[
+                        [106.72072, 10.79442],
+                        [106.72170, 10.79422],
+                        [106.72218, 10.79492],
+                        [106.72204, 10.79572],
+                        [106.72110, 10.79610],
+                        [106.72058, 10.79542],
+                        [106.72072, 10.79442]
+                    ]]
+                },
+                properties: {}
+            });
+        }
+
+        function discoverRenderedFootprintLayerIds() {
+            const layers = (map.getStyle() && map.getStyle().layers) || [];
+            const ids = [];
+            for (let i = 0; i < layers.length; ++i) {
+                const layer = layers[i];
+                if (!layer || layer.id.indexOf("home-") === 0)
+                    continue;
+                if ((layer.type === "fill" || layer.type === "fill-extrusion") && isBuildingLayer(layer))
+                    ids.push(layer.id);
+            }
+            return ids;
+        }
+
+        function scheduleSupplementalRefresh() {
+            window.clearTimeout(refreshTimer);
+            refreshTimer = window.setTimeout(refreshRenderedFootprints, 140);
+        }
+
+        function refreshRenderedFootprints() {
+            if (!map.isStyleLoaded() || !map3dActive)
+                return;
+
+            ensureSupplementalBuildings();
+            const source = map.getSource(SUPPLEMENTAL_SOURCE_ID);
+            if (!source || !source.setData)
+                return;
+
+            const layerIds = discoverRenderedFootprintLayerIds();
+            if (!layerIds.length) {
+                source.setData(emptyFeatureCollection());
+                return;
+            }
+
+            let rendered = [];
+            try {
+                const canvas = map.getCanvas();
+                const width = Math.max(1, canvas.clientWidth || canvas.width || 1);
+                const height = Math.max(1, canvas.clientHeight || canvas.height || 1);
+                rendered = map.queryRenderedFeatures([[0, 0], [width, height]], {
+                    layers: layerIds
+                });
+            } catch (e) {
+                console.warn("HOME_MAP_RENDERED_FOOTPRINT_QUERY_FAILED", safeStringifyError(e));
+                return;
+            }
+
+            const seen = {};
+            const features = [];
+            for (let i = 0; i < rendered.length; ++i) {
+                const feature = rendered[i];
+                if (!feature || !feature.geometry || !/Polygon/.test(feature.geometry.type))
+                    continue;
+                if (geometryTouchesLandmarkBounds(feature.geometry))
+                    continue;
+
+                const key = String(feature.layer && feature.layer.id) + ":"
+                        + String(feature.id || JSON.stringify(feature.geometry).slice(0, 160));
+                if (seen[key])
+                    continue;
+                seen[key] = true;
+
+                const properties = Object.assign({}, feature.properties || {});
+                properties.__height = normalizedHeight(properties, i);
+                features.push({
+                    type: "Feature",
+                    geometry: feature.geometry,
+                    properties: properties
+                });
+            }
+
+            source.setData({
+                type: "FeatureCollection",
+                features: features
+            });
+
+            const landmarkSource = map.getSource(LANDMARK_SOURCE_ID);
+            if (landmarkSource && landmarkSource.setData)
+                landmarkSource.setData(landmark81Features());
+
+            console.log("HOME_MAP_RENDERED_FOOTPRINT_3D=" + features.length);
+        }
+
+        function landmark81Features() {
+            const nativeFeature = landmarkFeatureFromRendered() || landmarkFeatureFromSource();
+            const feature = nativeFeature
+                    ? correctedLandmarkFeature(nativeFeature)
+                    : fallbackLandmark81Feature();
+
+            return {
+                type: "FeatureCollection",
+                features: [feature]
+            };
+        }
+
+        function ensureLandmark81() {
+            if (!map.isStyleLoaded() || !map3dActive)
+                return;
+
+            if (!map.getSource(LANDMARK_SOURCE_ID)) {
+                map.addSource(LANDMARK_SOURCE_ID, {
+                    type: "geojson",
+                    data: landmark81Features()
+                });
+            } else {
+                const source = map.getSource(LANDMARK_SOURCE_ID);
+                if (source && source.setData)
+                    source.setData(landmark81Features());
+            }
+
+            if (!map.getLayer(LANDMARK_LAYER_ID)) {
+                try {
+                    map.addLayer({
+                        id: LANDMARK_LAYER_ID,
+                        type: "fill-extrusion",
+                        source: LANDMARK_SOURCE_ID,
+                        minzoom: 13,
+                        paint: extrusionPaint(0.96)
+                    }, firstSymbolLayerId());
+                } catch (e) {
+                    console.warn("HOME_MAP_LANDMARK81_FAILED", safeStringifyError(e));
+                }
+            }
+        }
+
+        function ensureRouteLayers() {
+            if (!map.isStyleLoaded())
+                return;
+
+            if (!map.getSource(ROUTE_SOURCE_ID)) {
+                map.addSource(ROUTE_SOURCE_ID, {
+                    type: "geojson",
+                    data: EMPTY_ROUTE
+                });
+            }
+
+            if (!map.getLayer(ROUTE_CASING_LAYER_ID)) {
+                map.addLayer({
+                    id: ROUTE_CASING_LAYER_ID,
+                    type: "line",
+                    source: ROUTE_SOURCE_ID,
+                    layout: {
+                        "line-cap": "round",
+                        "line-join": "round"
+                    },
+                    paint: {
+                        "line-color": "#06101c",
+                        "line-width": 14,
+                        "line-opacity": 0.96
+                    }
+                });
+            }
+
+            if (!map.getLayer(ROUTE_LINE_LAYER_ID)) {
+                map.addLayer({
+                    id: ROUTE_LINE_LAYER_ID,
+                    type: "line",
+                    source: ROUTE_SOURCE_ID,
+                    layout: {
+                        "line-cap": "round",
+                        "line-join": "round"
+                    },
+                    paint: {
+                        "line-color": "#38bdf8",
+                        "line-width": 8,
+                        "line-opacity": 1.0
+                    }
+                });
+            }
+        }
+
+        function markerElement(color, arrow, markerKind) {
+            const element = document.createElement("div");
+            if (markerKind === "alarm") {
+                element.className = "home-route-alarm-marker";
+                ["ripple-1", "ripple-2", "ripple-3"].forEach(function (className) {
+                    const ripple = document.createElement("span");
+                    ripple.className = "home-marker-ripple " + className;
+                    element.appendChild(ripple);
+                });
+                const core = document.createElement("div");
+                core.className = "home-marker-core";
+                element.appendChild(core);
+                return element;
+            }
+
+            element.style.width = arrow ? "28px" : "20px";
+            element.style.height = arrow ? "28px" : "20px";
+            element.style.borderRadius = arrow ? "9px 9px 14px 14px" : "50%";
+            element.style.background = color;
+            element.style.border = "3px solid #ffffff";
+            element.style.boxShadow = "0 6px 18px rgba(0,0,0,.45)";
+            if (arrow)
+                element.style.clipPath = "polygon(50% 0, 92% 100%, 50% 78%, 8% 100%)";
+            return element;
+        }
+
+        function setMarker(existing, point, color, arrow, markerKind) {
+            const coord = pointFeature(point);
+            const kind = markerKind || (arrow ? "arrow" : "dot");
+
+            if (!coord) {
+                if (existing)
+                    existing.remove();
+                return null;
+            }
+
+            if (existing && (existing.__homeArrow !== !!arrow || existing.__homeKind !== kind)) {
+                existing.remove();
+                existing = null;
+            }
+
+            if (!existing) {
+                existing = new maplibregl.Marker({
+                    element: markerElement(color, arrow, kind),
+                    rotationAlignment: "map"
+                });
+                existing.__homeArrow = !!arrow;
+                existing.__homeKind = kind;
+            }
+
+            existing.setLngLat(coord).addTo(map);
+            return existing;
+        }
+
+        function setRoute(route) {
+            ensureRouteLayers();
+            const source = map.getSource(ROUTE_SOURCE_ID);
+            if (!source)
+                return;
+
+            source.setData({
+                type: "Feature",
+                geometry: {
+                    type: "LineString",
+                    coordinates: Array.isArray(route) ? route : []
+                },
+                properties: {}
+            });
+        }
+
+        function set3d(enabled) {
+            map3dActive = !!enabled;
+
+            ensureBuildingExtrusions();
+            ensureSupplementalBuildings();
+            ensureLandmark81();
+
+            const style = map.getStyle();
+            const layers = style && style.layers ? style.layers : [];
+            for (let i = 0; i < layers.length; ++i) {
+                const layer = layers[i];
+                if (!layer || layer.type !== "fill-extrusion" || layer.id.indexOf("home-") !== 0)
+                    continue;
+
+                try {
+                    map.setLayoutProperty(layer.id, "visibility", enabled ? "visible" : "none");
+                } catch (e) {
+                    console.warn("HOME_MAP_3D_VISIBILITY_FAILED", layer.id, safeStringifyError(e));
+                }
+
+                trySetPaint(layer.id, "fill-extrusion-opacity", enabled ? 0.94 : 0.0);
+            }
+
+            if (enabled)
+                scheduleSupplementalRefresh();
+        }
+
+        function updateProviderConfig(payload) {
+            const nextKey = payload.goongMapTilesKey || goongMapTilesKey;
+            const nextStyle = payload.goongStyleUrl || goongStyleUrl || DEFAULT_GOONG_STYLE_URL;
+            const nextBuildingLayer = payload.buildingSourceLayer || configuredBuildingLayer || DEFAULT_GOONG_BUILDING_LAYER;
+            const needsReload = !providerStyleApplied
+                    || nextKey !== goongMapTilesKey
+                    || nextStyle !== goongStyleUrl
+                    || nextBuildingLayer !== configuredBuildingLayer;
+
+            goongMapTilesKey = nextKey;
+            goongStyleUrl = nextStyle;
+            configuredBuildingLayer = nextBuildingLayer;
+
+            if (!needsReload)
+                return false;
+
+            loadProviderStyle("config");
+            return true;
+        }
+
+        function applyPayload(payload) {
+            if (!payload)
+                return;
+
+            lastPayload = payload;
+
+            if (updateProviderConfig(payload))
+                return;
+
+            if (!map.isStyleLoaded()) {
+                window.setTimeout(function () {
+                    applyPayload(payload);
+                }, 80);
+                return;
+            }
+
+            const enabled3d = payload.enabled3d !== false;
+            const routeActive = !!payload.navigationActive;
+            const hasRoute = routeActive
+                    && Array.isArray(payload.route)
+                    && payload.route.length > 1;
+            const hasDestination = !!pointFeature(payload.destination);
+            const center = pointFeature(payload.center) || DEFAULT_CENTER;
+            const targetPitch = enabled3d
+                    ? (Number.isFinite(payload.pitch)
+                        ? Math.max(routeActive ? 60 : 44, payload.pitch)
+                        : (routeActive ? 62 : 48))
+                    : 0;
+            const minZoom = routeActive ? 17.8 : 12.6;
+            const targetZoom = Number.isFinite(payload.zoom)
+                    ? Math.max(payload.zoom, enabled3d ? minZoom : 2)
+                    : map.getZoom();
+
+            ensureRouteLayers();
+            setRoute(payload.route);
+            currentMarker = setMarker(currentMarker,
+                                      payload.current,
+                                      routeActive ? "#7f1018" : "#1a73e8",
+                                      false,
+                                      routeActive ? "alarm" : "dot");
+            destinationMarker = setMarker(destinationMarker,
+                                          payload.destination,
+                                          routeActive ? "#7f1018" : "#ef4444",
+                                          false,
+                                          routeActive ? "alarm" : "dot");
+            console.warn("HOME_MAP_MARKER_MODE", routeActive ? "alarm" : "normal", "routePoints", Array.isArray(payload.route) ? payload.route.length : 0, "destination", hasDestination);
+
+            map.easeTo({
+                center: center,
+                zoom: targetZoom,
+                pitch: targetPitch,
+                bearing: Number.isFinite(payload.bearing) ? payload.bearing : map.getBearing(),
+                duration: 120,
+                essential: true
+            });
+
+            set3d(enabled3d);
+        }
+
+        function rebuildStyleLayers() {
+            if (!map.isStyleLoaded())
+                return;
+
+            applyDarkMapColors();
+            ensureBuildingExtrusions();
+            ensureSupplementalBuildings();
+            ensureLandmark81();
+            ensureRouteLayers();
+            set3d(map3dActive);
+            scheduleSupplementalRefresh();
+
+            if (lastPayload)
+                applyPayload(lastPayload);
+        }
+
+        map.on("load", function () {
+            setDebug("HOME_MAP_READY");
+            rebuildStyleLayers();
+        });
+
+        map.on("style.load", function () {
+            setDebug("HOME_MAP_STYLE_READY");
+            window.clearTimeout(providerStyleLoadTimer);
+            providerStyleRetryCount = 0;
+            resizeMapSoon();
+            rebuildStyleLayers();
+        });
+
+        map.on("error", function (e) {
+            const err = e && e.error ? e.error : e;
+            console.error("HOME_MAP_ERROR=" + safeStringifyError(err));
+            if (isProviderStyleError(err))
+                scheduleProviderStyleRetry("provider-style-fetch");
+        });
+
+        window.addEventListener("online", function () {
+            if (providerStyleApplied)
+                scheduleProviderStyleRetry("browser-online");
+        });
+
+        window.homeMiniMap = {
+            update: function (payload) {
+                applyPayload(payload);
+            }
+        };
+    </script>
+</body>
+</html>

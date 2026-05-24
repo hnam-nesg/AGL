@@ -1,0 +1,1162 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="qrc:/maplibre-gl.css">
+
+    <style>
+        html,
+        body,
+        #map {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #0b1220;
+        }
+
+        .maplibregl-ctrl-logo,
+        .maplibregl-ctrl-attrib {
+            display: none !important;
+        }
+
+        #debug {
+            position: absolute;
+            left: 10px;
+            bottom: 10px;
+            z-index: 9999;
+            padding: 6px 10px;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.62);
+            color: white;
+            font-family: sans-serif;
+            font-size: 13px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <script src="qrc:/maplibre-gl.js"></script>
+
+    <script>
+        console.log("GOONG_MAP_HTML_VERSION_2026_05_12_NATIVE_LANDMARK81_3D");
+
+        const DEFAULT_CENTER = [106.70290, 10.80690];
+        const DEFAULT_GOONG_STYLE_URL = "https://tiles.goong.io/assets/goong_map_web.json";
+        const DEFAULT_GOONG_BUILDING_LAYER = "VN_Building";
+
+        const EMPTY_ROUTE = {
+            type: "Feature",
+            geometry: {
+                type: "LineString",
+                coordinates: []
+            },
+            properties: {}
+        };
+
+        let currentMarker = null;
+        let destinationMarker = null;
+        let lastPayload = null;
+        let map3dActive = true;
+        let cameraLogTimer = null;
+        let goongMapTilesKey = "";
+        let goongStyleUrl = DEFAULT_GOONG_STYLE_URL;
+        let configuredBuildingLayer = DEFAULT_GOONG_BUILDING_LAYER;
+        let nativeBuilding3dLayerIds = [];
+        let supplementalRefreshTimer = null;
+        let renderedFootprintLayerIds = [];
+        const SUPPLEMENTAL_BUILDING_LAYER_ID = "goong-building-3d-supplemental";
+        const SUPPLEMENTAL_BUILDING_SOURCE_ID = "goong-building-3d-supplemental-source";
+        const LANDMARK_81_LAYER_ID = "goong-landmark81-3d-correction";
+        const LANDMARK_81_SOURCE_ID = "goong-landmark81-3d-correction-source";
+        const LANDMARK_81_HEIGHT = 461.2;
+        const LANDMARK_81_BOUNDS = {
+            west: 106.72055,
+            south: 10.79405,
+            east: 106.72285,
+            north: 10.79645
+        };
+
+        function setDebug(text) {
+            const el = document.getElementById("debug");
+            if (el)
+                el.textContent = text;
+            console.log("MAP_DEBUG=" + text);
+        }
+
+        function pointFeature(point) {
+            if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lon))
+                return null;
+
+            return [point.lon, point.lat];
+        }
+
+        function safeStringifyError(err) {
+            if (!err)
+                return "unknown error";
+
+            try {
+                return JSON.stringify({
+                    message: err.message ? err.message : String(err),
+                    status: err.status,
+                    statusText: err.statusText,
+                    url: err.url
+                });
+            } catch (e) {
+                return String(err);
+            }
+        }
+
+        function styleUrlWithKey() {
+            const base = goongStyleUrl || DEFAULT_GOONG_STYLE_URL;
+            const separator = base.indexOf("?") === -1 ? "?" : "&";
+
+            if (base.indexOf("api_key=") !== -1 || base.indexOf("access_token=") !== -1)
+                return base;
+
+            return base + separator + "api_key=" + encodeURIComponent(goongMapTilesKey);
+        }
+
+        function buildStyleUrl() {
+            if (!goongMapTilesKey && (goongStyleUrl || DEFAULT_GOONG_STYLE_URL).indexOf("api_key=") === -1) {
+                //setDebug("GOONG_MAPTILES_KEY_MISSING");
+                console.error("GOONG_MAPTILES_KEY_MISSING");
+            }
+
+            return styleUrlWithKey();
+        }
+
+        const map = new maplibregl.Map({
+            container: "map",
+            style: buildStyleUrl(),
+            center: DEFAULT_CENTER,
+            zoom: 16.6,
+            pitch: 58,
+            minPitch: 0,
+            maxPitch: 80,
+            bearing: -18,
+            antialias: true,
+            attributionControl: false
+        });
+
+        function enableNativeInteraction() {
+            [
+                "dragPan",
+                "scrollZoom",
+                "boxZoom",
+                "doubleClickZoom",
+                "dragRotate",
+                "touchZoomRotate",
+                "keyboard"
+            ].forEach(function (handlerName) {
+                try {
+                    if (map[handlerName] && map[handlerName].enable)
+                        map[handlerName].enable();
+                } catch (e) {
+                    console.warn("GOONG_INTERACTION_ENABLE_FAILED", handlerName, e);
+                }
+            });
+
+            try {
+                if (map.touchPitch && map.touchPitch.enable)
+                    map.touchPitch.enable();
+            } catch (e) {
+                console.warn("GOONG_TOUCH_PITCH_ENABLE_FAILED", e);
+            }
+        }
+
+        enableNativeInteraction();
+
+        function sendCameraToQml() {
+            window.clearTimeout(cameraLogTimer);
+            cameraLogTimer = window.setTimeout(function () {
+                const center = map.getCenter();
+                console.log("MAPLIBRE_CAMERA=" + JSON.stringify({
+                    lat: center.lat,
+                    lon: center.lng,
+                    zoom: map.getZoom(),
+                    pitch: map.getPitch(),
+                    bearing: map.getBearing()
+                }));
+            }, 40);
+        }
+
+        map.on("movestart", function (e) {
+            if (e && e.originalEvent)
+                console.log("MAPLIBRE_USER_GESTURE_START");
+        });
+        map.on("moveend", sendCameraToQml);
+        map.on("zoomend", sendCameraToQml);
+        map.on("rotateend", sendCameraToQml);
+        map.on("pitchend", sendCameraToQml);
+        map.on("idle", scheduleSupplementalRefresh);
+        map.on("moveend", scheduleSupplementalRefresh);
+        map.on("zoomend", scheduleSupplementalRefresh);
+
+        function resizeMapSoon() {
+            [0, 120, 500, 1200].forEach(function (delay) {
+                window.setTimeout(function () {
+                    try {
+                        map.resize();
+                    } catch (e) {
+                        console.warn("GOONG_RESIZE_FAILED", e);
+                    }
+                }, delay);
+            });
+        }
+
+        window.addEventListener("resize", resizeMapSoon);
+        resizeMapSoon();
+
+        function styleHeightExpression(fallbackHeight) {
+            return [
+                "case",
+                ["has", "__height"], ["to-number", ["get", "__height"], fallbackHeight],
+                ["has", "render_height"], ["to-number", ["get", "render_height"], fallbackHeight],
+                ["has", "height"], ["to-number", ["get", "height"], fallbackHeight],
+                ["has", "building_height"], ["to-number", ["get", "building_height"], fallbackHeight],
+                ["has", "HGT"], ["to-number", ["get", "HGT"], fallbackHeight],
+                ["has", "levels"], ["*", ["to-number", ["get", "levels"], 4], 3.4],
+                ["has", "building:levels"], ["*", ["to-number", ["get", "building:levels"], 4], 3.4],
+                fallbackHeight
+            ];
+        }
+
+        function buildingMaterialColorExpression(height) {
+            return [
+                "interpolate",
+                ["linear"],
+                height,
+                0, "#c9d7d8",
+                24, "#d6c7ab",
+                80, "#b8c6d0",
+                180, "#9eafbf",
+                360, "#d8e0e8",
+                470, "#f0f4f8"
+            ];
+        }
+
+        function setPaintIfPossible(layerId, property, value) {
+            try {
+                if (map.getLayer(layerId))
+                    map.setPaintProperty(layerId, property, value);
+            } catch (e) {
+                console.warn("GOONG_COLOR_PASS_FAILED", layerId, property, e);
+            }
+        }
+
+        function enhanceGoongMapColors() {
+            if (!map.isStyleLoaded())
+                return false;
+
+            const style = map.getStyle();
+            const layers = style && Array.isArray(style.layers) ? style.layers : [];
+            const buildingHeight = styleHeightExpression(18);
+            const buildingColor = buildingMaterialColorExpression(buildingHeight);
+
+            for (let i = 0; i < layers.length; ++i) {
+                const layer = layers[i];
+                const id = String(layer.id || "").toLowerCase();
+                const sourceLayer = String(layer["source-layer"] || "").toLowerCase();
+                const classLike = id + " " + sourceLayer;
+
+                if (layer.type === "background") {
+                    setPaintIfPossible(layer.id, "background-color", "#edf3e5");
+                } else if (layer.type === "fill" && classLike.indexOf("water") !== -1) {
+                    setPaintIfPossible(layer.id, "fill-color", "#5bb9c9");
+                    setPaintIfPossible(layer.id, "fill-opacity", 0.92);
+                } else if (layer.type === "fill" &&
+                           (classLike.indexOf("park") !== -1 ||
+                            classLike.indexOf("green") !== -1 ||
+                            classLike.indexOf("landuse") !== -1 ||
+                            classLike.indexOf("landcover") !== -1)) {
+                    setPaintIfPossible(layer.id, "fill-color", [
+                        "match",
+                        ["get", "class"],
+                        "park", "#8fd19e",
+                        "grass", "#a6d889",
+                        "wood", "#7abf87",
+                        "residential", "#f0ead6",
+                        "commercial", "#f3dfcb",
+                        "industrial", "#e7e3dc",
+                        "#e4edd0"
+                    ]);
+                    setPaintIfPossible(layer.id, "fill-opacity", 0.86);
+                } else if (layer.type === "line" &&
+                           (classLike.indexOf("road") !== -1 ||
+                            classLike.indexOf("transportation") !== -1)) {
+                    setPaintIfPossible(layer.id, "line-color", [
+                        "match",
+                        ["get", "class"],
+                        "motorway", "#f0a646",
+                        "trunk", "#f2b35d",
+                        "primary", "#f4c16f",
+                        "secondary", "#ffe0a3",
+                        "tertiary", "#fff1c9",
+                        "#fff8e4"
+                    ]);
+                } else if (layer.type === "fill-extrusion" &&
+                           (classLike.indexOf("building") !== -1 ||
+                            classLike.indexOf("extrusion") !== -1)) {
+                    setPaintIfPossible(layer.id, "fill-extrusion-color", buildingColor);
+                    setPaintIfPossible(layer.id, "fill-extrusion-opacity", map3dActive ? 1.0 : 0.0);
+                    setPaintIfPossible(layer.id, "fill-extrusion-vertical-gradient", true);
+                }
+            }
+
+            return true;
+        }
+
+        function ensureGoongBuildingLayers() {
+            if (!map.isStyleLoaded())
+                return false;
+
+            const style = map.getStyle();
+            const layers = style && Array.isArray(style.layers) ? style.layers : [];
+            const wantedLayer = String(configuredBuildingLayer || DEFAULT_GOONG_BUILDING_LAYER).toLowerCase();
+            const layerIds = [];
+            const fallbackIds = [];
+
+            for (let i = 0; i < layers.length; ++i) {
+                const layer = layers[i];
+                const sourceLayer = String(layer["source-layer"] || "").toLowerCase();
+                const id = String(layer.id || "").toLowerCase();
+                const looksLikeBuilding = sourceLayer.indexOf("building") !== -1
+                        || id.indexOf("building") !== -1
+                        || id.indexOf("extrusion") !== -1;
+
+                if (layer.type !== "fill-extrusion")
+                    continue;
+
+                if (sourceLayer === wantedLayer) {
+                    layerIds.push(layer.id);
+                } else if (looksLikeBuilding) {
+                    fallbackIds.push(layer.id);
+                }
+            }
+
+            nativeBuilding3dLayerIds = layerIds.length ? layerIds : fallbackIds;
+
+            if (!nativeBuilding3dLayerIds.length) {
+                console.warn("GOONG_NATIVE_3D_BUILDING_LAYER_NOT_FOUND");
+                return false;
+            }
+
+            console.log("GOONG_NATIVE_3D_BUILDING_LAYER_OK=" + nativeBuilding3dLayerIds.join(","));
+            return true;
+        }
+
+        function firstSymbolLayerId() {
+            const style = map.getStyle();
+            const layers = style && Array.isArray(style.layers) ? style.layers : [];
+
+            for (let i = 0; i < layers.length; ++i) {
+                if (layers[i].type === "symbol")
+                    return layers[i].id;
+            }
+
+            return undefined;
+        }
+
+        function extrusionHeightExpression(fallbackHeight) {
+            return ["to-number", ["get", "__height"], fallbackHeight];
+        }
+
+        function extrusionBaseExpression() {
+            return ["to-number", ["get", "__base"], 0];
+        }
+
+        function parseNumber(value) {
+            if (value === undefined || value === null)
+                return NaN;
+
+            if (typeof value === "number")
+                return Number.isFinite(value) ? value : NaN;
+
+            const text = String(value).replace(",", ".").trim();
+            const match = text.match(/-?\d+(\.\d+)?/);
+            if (!match)
+                return NaN;
+
+            const number = Number(match[0]);
+            return Number.isFinite(number) ? number : NaN;
+        }
+
+        function numberProperty(properties, names) {
+            for (let i = 0; i < names.length; ++i) {
+                const value = parseNumber(properties[names[i]]);
+                if (Number.isFinite(value))
+                    return value;
+            }
+
+            return NaN;
+        }
+
+        function addCoordinateToBounds(bounds, value) {
+            if (!Array.isArray(value))
+                return;
+
+            if (value.length >= 2 && typeof value[0] === "number" && typeof value[1] === "number") {
+                bounds.west = Math.min(bounds.west, value[0]);
+                bounds.south = Math.min(bounds.south, value[1]);
+                bounds.east = Math.max(bounds.east, value[0]);
+                bounds.north = Math.max(bounds.north, value[1]);
+                return;
+            }
+
+            for (let i = 0; i < value.length; ++i)
+                addCoordinateToBounds(bounds, value[i]);
+        }
+
+        function geometryBounds(geometry) {
+            if (!geometry || !geometry.coordinates)
+                return null;
+
+            const bounds = {
+                west: Infinity,
+                south: Infinity,
+                east: -Infinity,
+                north: -Infinity
+            };
+            addCoordinateToBounds(bounds, geometry.coordinates);
+
+            if (!Number.isFinite(bounds.west) || !Number.isFinite(bounds.south)
+                    || !Number.isFinite(bounds.east) || !Number.isFinite(bounds.north))
+                return null;
+
+            return bounds;
+        }
+
+        function boundsCenter(bounds) {
+            return [
+                (bounds.west + bounds.east) / 2,
+                (bounds.south + bounds.north) / 2
+            ];
+        }
+
+        function pointInBounds(point, bounds) {
+            return point[0] >= bounds.west && point[0] <= bounds.east
+                    && point[1] >= bounds.south && point[1] <= bounds.north;
+        }
+
+        function landmarkNameMatch(properties) {
+            const keys = ["name", "Name", "NAME", "name_en", "name:en", "display_name"];
+            for (let i = 0; i < keys.length; ++i) {
+                const value = properties[keys[i]];
+                if (!value)
+                    continue;
+
+                const text = String(value).toLowerCase();
+                if (text.indexOf("landmark") !== -1 && text.indexOf("81") !== -1)
+                    return true;
+            }
+
+            return false;
+        }
+
+        function isLandmark81Feature(properties, geometry) {
+            if (landmarkNameMatch(properties))
+                return true;
+
+            const bounds = geometryBounds(geometry);
+            return bounds ? pointInBounds(boundsCenter(bounds), LANDMARK_81_BOUNDS) : false;
+        }
+
+        function featureHeightMeters(properties, geometry) {
+            if (isLandmark81Feature(properties, geometry))
+                return LANDMARK_81_HEIGHT;
+
+            const explicitHeight = numberProperty(properties, [
+                "render_height",
+                "height",
+                "building_height",
+                "HGT"
+            ]);
+            if (Number.isFinite(explicitHeight) && explicitHeight > 0)
+                return explicitHeight;
+
+            const levels = numberProperty(properties, ["levels", "building:levels"]);
+            if (Number.isFinite(levels) && levels > 0)
+                return levels * 3.4;
+
+            return 18;
+        }
+
+        function featureMinHeightMeters(properties) {
+            const minHeight = numberProperty(properties, [
+                "render_min_height",
+                "min_height",
+                "building_min_height"
+            ]);
+
+            return Number.isFinite(minHeight) && minHeight > 0 ? minHeight : 0;
+        }
+
+        function boundsArea(bounds) {
+            if (!bounds)
+                return 0;
+            return Math.max(0, bounds.east - bounds.west) * Math.max(0, bounds.north - bounds.south);
+        }
+
+        function landmarkFeatureScore(feature) {
+            if (!feature || !feature.geometry ||
+                    (feature.geometry.type !== "Polygon" && feature.geometry.type !== "MultiPolygon"))
+                return -1;
+
+            const properties = feature.properties || {};
+            const geometry = feature.geometry;
+            if (!isLandmark81Feature(properties, geometry))
+                return -1;
+
+            const bounds = geometryBounds(geometry);
+            const nameBonus = landmarkNameMatch(properties) ? 1000 : 0;
+            return nameBonus + boundsArea(bounds);
+        }
+
+        function bestLandmark81Feature(features) {
+            let best = null;
+            let bestScore = -1;
+
+            for (let i = 0; i < (features || []).length; ++i) {
+                const score = landmarkFeatureScore(features[i]);
+                if (score > bestScore) {
+                    best = features[i];
+                    bestScore = score;
+                }
+            }
+
+            return bestScore >= 0 ? best : null;
+        }
+
+        function buildingSourceLayerCandidates() {
+            const style = map.getStyle();
+            const layers = style && Array.isArray(style.layers) ? style.layers : [];
+            const seen = {};
+            const candidates = [];
+            const wantedLayer = String(configuredBuildingLayer || DEFAULT_GOONG_BUILDING_LAYER).toLowerCase();
+
+            function push(source, sourceLayer) {
+                if (!source || !sourceLayer)
+                    return;
+                const key = source + "|" + sourceLayer;
+                if (seen[key])
+                    return;
+                seen[key] = true;
+                candidates.push({
+                    source: source,
+                    sourceLayer: sourceLayer
+                });
+            }
+
+            for (let i = 0; i < layers.length; ++i) {
+                const layer = layers[i];
+                const sourceLayer = String(layer["source-layer"] || "").toLowerCase();
+                const id = String(layer.id || "").toLowerCase();
+                const looksLikeBuilding = sourceLayer === wantedLayer
+                        || sourceLayer.indexOf("building") !== -1
+                        || id.indexOf("building") !== -1
+                        || id.indexOf("footprint") !== -1
+                        || id.indexOf("extrusion") !== -1;
+
+                if (looksLikeBuilding)
+                    push(layer.source, layer["source-layer"]);
+            }
+
+            return candidates;
+        }
+
+        function landmark81FeatureFromSource() {
+            const candidates = buildingSourceLayerCandidates();
+            let best = null;
+            let bestScore = -1;
+
+            for (let i = 0; i < candidates.length; ++i) {
+                const candidate = candidates[i];
+                try {
+                    const features = map.querySourceFeatures(candidate.source, {
+                        sourceLayer: candidate.sourceLayer
+                    });
+                    const feature = bestLandmark81Feature(features);
+                    const score = landmarkFeatureScore(feature);
+                    if (score > bestScore) {
+                        best = feature;
+                        bestScore = score;
+                    }
+                } catch (e) {
+                    console.warn("GOONG_LANDMARK81_SOURCE_QUERY_FAILED", safeStringifyError(e));
+                }
+            }
+
+            return best;
+        }
+
+        function correctedLandmark81Feature(feature) {
+            const properties = Object.assign({}, feature && feature.properties ? feature.properties : {});
+            properties.name = properties.name || "Landmark 81";
+            properties.__height = LANDMARK_81_HEIGHT;
+            properties.__base = 0;
+            properties.__landmark81 = 1;
+
+            return {
+                type: "Feature",
+                geometry: feature.geometry,
+                properties: properties
+            };
+        }
+
+        function fallbackLandmark81Feature() {
+            return correctedLandmark81Feature({
+                geometry: {
+                    type: "Polygon",
+                    coordinates: [[
+                        [106.72072, 10.79442],
+                        [106.72170, 10.79422],
+                        [106.72218, 10.79492],
+                        [106.72204, 10.79572],
+                        [106.72110, 10.79610],
+                        [106.72058, 10.79542],
+                        [106.72072, 10.79442]
+                    ]]
+                },
+                properties: {
+                    name: "Landmark 81"
+                }
+            });
+        }
+
+        function landmark81Features(renderedFeatures) {
+            const feature = bestLandmark81Feature(renderedFeatures)
+                    || landmark81FeatureFromSource()
+                    || fallbackLandmark81Feature();
+            return [correctedLandmark81Feature(feature)];
+        }
+
+        function normalizeFootprintFeature(feature) {
+            const geometry = feature && feature.geometry ? feature.geometry : null;
+            if (!geometry || (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon"))
+                return null;
+
+            const properties = Object.assign({}, feature.properties || {});
+            properties.__height = featureHeightMeters(properties, geometry);
+            properties.__base = featureMinHeightMeters(properties);
+            properties.__landmark81 = isLandmark81Feature(properties, geometry) ? 1 : 0;
+
+            return {
+                type: "Feature",
+                geometry: geometry,
+                properties: properties
+            };
+        }
+
+        function featureKey(feature) {
+            const bounds = geometryBounds(feature.geometry);
+            if (!bounds)
+                return "";
+
+            const id = feature.id !== undefined && feature.id !== null ? String(feature.id) : "";
+            const layerId = feature.layer && feature.layer.id ? feature.layer.id : "";
+            return layerId + ":" + id + ":"
+                    + bounds.west.toFixed(6) + ","
+                    + bounds.south.toFixed(6) + ","
+                    + bounds.east.toFixed(6) + ","
+                    + bounds.north.toFixed(6);
+        }
+
+        function isBuildingFootprintLayer(layer) {
+            if (!layer || layer.type !== "fill" || !layer.source || !layer["source-layer"])
+                return false;
+
+            if (layer.source === SUPPLEMENTAL_BUILDING_SOURCE_ID || layer.source === LANDMARK_81_SOURCE_ID)
+                return false;
+
+            const wantedLayer = String(configuredBuildingLayer || DEFAULT_GOONG_BUILDING_LAYER).toLowerCase();
+            const sourceLayer = String(layer["source-layer"] || "").toLowerCase();
+            const id = String(layer.id || "").toLowerCase();
+
+            return sourceLayer === wantedLayer
+                    || sourceLayer.indexOf("building") !== -1
+                    || id.indexOf("building") !== -1
+                    || id.indexOf("footprint") !== -1;
+        }
+
+        function discoverRenderedFootprintLayerIds() {
+            const style = map.getStyle();
+            const layers = style && Array.isArray(style.layers) ? style.layers : [];
+            const ids = [];
+
+            for (let i = 0; i < layers.length; ++i) {
+                if (isBuildingFootprintLayer(layers[i]))
+                    ids.push(layers[i].id);
+            }
+
+            renderedFootprintLayerIds = ids;
+            return ids;
+        }
+
+        function ensureSupplementalBuildingLayer() {
+            if (!map.isStyleLoaded())
+                return false;
+
+            if (!map.getSource(SUPPLEMENTAL_BUILDING_SOURCE_ID)) {
+                map.addSource(SUPPLEMENTAL_BUILDING_SOURCE_ID, {
+                    type: "geojson",
+                    data: {
+                        type: "FeatureCollection",
+                        features: []
+                    }
+                });
+            }
+
+            if (map.getLayer(SUPPLEMENTAL_BUILDING_LAYER_ID))
+                return true;
+
+            const height = extrusionHeightExpression(18);
+            const minHeight = extrusionBaseExpression();
+            const beforeLayer = nativeBuilding3dLayerIds.length ? nativeBuilding3dLayerIds[0] : undefined;
+            const supplementalLayer = {
+                id: SUPPLEMENTAL_BUILDING_LAYER_ID,
+                type: "fill-extrusion",
+                source: SUPPLEMENTAL_BUILDING_SOURCE_ID,
+                minzoom: 12,
+                paint: {
+                    "fill-extrusion-color": buildingMaterialColorExpression(height),
+                    "fill-extrusion-height": height,
+                    "fill-extrusion-base": minHeight,
+                    "fill-extrusion-opacity": map3dActive ? 0.96 : 0.0,
+                    "fill-extrusion-vertical-gradient": true
+                }
+            };
+
+            try {
+                if (beforeLayer && map.getLayer(beforeLayer))
+                    map.addLayer(supplementalLayer, beforeLayer);
+                else
+                    map.addLayer(supplementalLayer);
+                return true;
+            } catch (e) {
+                console.warn("GOONG_SUPPLEMENTAL_3D_ADD_FAILED", safeStringifyError(e));
+                return false;
+            }
+        }
+
+        function ensureLandmark81Layer() {
+            if (!map.isStyleLoaded())
+                return false;
+
+            if (!map.getSource(LANDMARK_81_SOURCE_ID)) {
+                map.addSource(LANDMARK_81_SOURCE_ID, {
+                    type: "geojson",
+                    data: {
+                        type: "FeatureCollection",
+                        features: landmark81Features()
+                    }
+                });
+            }
+
+            if (map.getLayer(LANDMARK_81_LAYER_ID))
+                return true;
+
+            const layer = {
+                id: LANDMARK_81_LAYER_ID,
+                type: "fill-extrusion",
+                source: LANDMARK_81_SOURCE_ID,
+                minzoom: 12,
+                paint: {
+                    "fill-extrusion-color": buildingMaterialColorExpression(extrusionHeightExpression(LANDMARK_81_HEIGHT)),
+                    "fill-extrusion-height": extrusionHeightExpression(LANDMARK_81_HEIGHT),
+                    "fill-extrusion-base": extrusionBaseExpression(),
+                    "fill-extrusion-opacity": map3dActive ? 0.96 : 0.0,
+                    "fill-extrusion-vertical-gradient": true
+                }
+            };
+
+            try {
+                const beforeLayer = firstSymbolLayerId();
+                if (beforeLayer)
+                    map.addLayer(layer, beforeLayer);
+                else
+                    map.addLayer(layer);
+                return true;
+            } catch (e) {
+                console.warn("GOONG_LANDMARK81_3D_ADD_FAILED", safeStringifyError(e));
+                return false;
+            }
+        }
+
+        function scheduleSupplementalRefresh() {
+            window.clearTimeout(supplementalRefreshTimer);
+            supplementalRefreshTimer = window.setTimeout(refreshRenderedFootprint3d, 120);
+        }
+
+        function refreshRenderedFootprint3d() {
+            if (!map.isStyleLoaded())
+                return;
+
+            ensureGoongBuildingLayers();
+            ensureSupplementalBuildingLayer();
+            ensureLandmark81Layer();
+
+            const supplementalSource = map.getSource(SUPPLEMENTAL_BUILDING_SOURCE_ID);
+            const landmarkSource = map.getSource(LANDMARK_81_SOURCE_ID);
+            if (!supplementalSource || !supplementalSource.setData)
+                return;
+
+            const layerIds = discoverRenderedFootprintLayerIds();
+            if (!layerIds.length) {
+                supplementalSource.setData({
+                    type: "FeatureCollection",
+                    features: []
+                });
+                if (landmarkSource && landmarkSource.setData) {
+                    landmarkSource.setData({
+                        type: "FeatureCollection",
+                        features: landmark81Features()
+                    });
+                }
+                console.warn("GOONG_RENDERED_FOOTPRINT_LAYERS_NOT_FOUND");
+                return;
+            }
+
+            let rendered = [];
+            try {
+                const canvas = map.getCanvas();
+                const width = Math.max(1, canvas.clientWidth || canvas.width || 1);
+                const height = Math.max(1, canvas.clientHeight || canvas.height || 1);
+                rendered = map.queryRenderedFeatures([[0, 0], [width, height]], {
+                    layers: layerIds
+                });
+            } catch (e) {
+                console.warn("GOONG_RENDERED_FOOTPRINT_QUERY_FAILED", safeStringifyError(e));
+                return;
+            }
+
+            const seen = {};
+            const features = [];
+
+            for (let i = 0; i < rendered.length; ++i) {
+                const normalized = normalizeFootprintFeature(rendered[i]);
+                if (!normalized)
+                    continue;
+                if (normalized.properties && normalized.properties.__landmark81)
+                    continue;
+
+                const key = featureKey(rendered[i]) || featureKey(normalized);
+                if (key && seen[key])
+                    continue;
+                if (key)
+                    seen[key] = true;
+
+                features.push(normalized);
+            }
+
+            supplementalSource.setData({
+                type: "FeatureCollection",
+                features: features
+            });
+
+            if (landmarkSource && landmarkSource.setData) {
+                landmarkSource.setData({
+                    type: "FeatureCollection",
+                    features: landmark81Features(rendered)
+                });
+            }
+
+            console.log("GOONG_RENDERED_FOOTPRINT_3D="
+                    + features.length + " layers=" + layerIds.join(","));
+        }
+
+        map.on("load", function () {
+            console.log("GOONG_MAP_LOAD_OK");
+            //setDebug("GOONG_COLORFUL_3D_2026_05_12");
+            resizeMapSoon();
+
+            enhanceGoongMapColors();
+            ensureGoongBuildingLayers();
+            ensureSupplementalBuildingLayer();
+            ensureLandmark81Layer();
+            ensureRouteSource();
+            applyRouteLayer();
+            set3d(true);
+            scheduleSupplementalRefresh();
+
+            if (lastPayload)
+                applyPayload(lastPayload);
+        });
+
+        map.on("style.load", function () {
+            //console.log("GOONG_STYLE_LOAD_OK");
+            resizeMapSoon();
+
+            enhanceGoongMapColors();
+            ensureGoongBuildingLayers();
+            ensureSupplementalBuildingLayer();
+            ensureLandmark81Layer();
+            ensureRouteSource();
+            applyRouteLayer();
+            set3d(map3dActive);
+            scheduleSupplementalRefresh();
+
+            if (lastPayload)
+                applyPayload(lastPayload);
+        });
+
+        map.on("error", function (e) {
+            const err = e && e.error ? e.error : e;
+            const text = "GOONG_MAP_ERROR=" + safeStringifyError(err);
+            console.error(text);
+            //setDebug(text);
+        });
+
+        function ensureRouteSource() {
+            if (!map.isStyleLoaded())
+                return false;
+
+            if (!map.getSource("navigation-route")) {
+                map.addSource("navigation-route", {
+                    type: "geojson",
+                    data: EMPTY_ROUTE
+                });
+            }
+
+            return true;
+        }
+
+        function marker(color) {
+            const element = document.createElement("div");
+            element.style.width = "20px";
+            element.style.height = "20px";
+            element.style.borderRadius = "50%";
+            element.style.background = color;
+            element.style.border = "3px solid #ffffff";
+            element.style.boxShadow = "0 2px 10px rgba(0,0,0,.35)";
+            return element;
+        }
+
+        function setMarker(existing, point, color) {
+            const coord = pointFeature(point);
+
+            if (!coord) {
+                if (existing)
+                    existing.remove();
+                return null;
+            }
+
+            if (!existing) {
+                existing = new maplibregl.Marker({
+                    element: marker(color),
+                    rotationAlignment: "map"
+                });
+            }
+
+            existing.setLngLat(coord).addTo(map);
+            return existing;
+        }
+
+        function routeFeature(route) {
+            return {
+                type: "Feature",
+                geometry: {
+                    type: "LineString",
+                    coordinates: Array.isArray(route) ? route : []
+                },
+                properties: {}
+            };
+        }
+
+        function setRoute(route) {
+            if (!ensureRouteSource())
+                return;
+
+            const source = map.getSource("navigation-route");
+            if (source)
+                source.setData(routeFeature(route));
+        }
+
+        function applyRouteLayer() {
+            if (!ensureRouteSource())
+                return;
+
+            if (!map.getLayer("navigation-route-casing")) {
+                map.addLayer({
+                    id: "navigation-route-casing",
+                    type: "line",
+                    source: "navigation-route",
+                    layout: {
+                        "line-cap": "round",
+                        "line-join": "round"
+                    },
+                    paint: {
+                        "line-color": "#0f172a",
+                        "line-width": 14,
+                        "line-opacity": 0.96
+                    }
+                });
+            }
+
+            if (!map.getLayer("navigation-route-line")) {
+                map.addLayer({
+                    id: "navigation-route-line",
+                    type: "line",
+                    source: "navigation-route",
+                    layout: {
+                        "line-cap": "round",
+                        "line-join": "round"
+                    },
+                    paint: {
+                        "line-color": "#38bdf8",
+                        "line-width": 8,
+                        "line-opacity": 1.0
+                    }
+                });
+            }
+        }
+
+        function set3d(enabled) {
+            map3dActive = !!enabled;
+
+            ensureGoongBuildingLayers();
+            ensureSupplementalBuildingLayer();
+            ensureLandmark81Layer();
+
+            for (let i = 0; i < nativeBuilding3dLayerIds.length; ++i) {
+                const layerId = nativeBuilding3dLayerIds[i];
+                if (!map.getLayer(layerId))
+                    continue;
+
+                try {
+                    map.setLayoutProperty(layerId, "visibility", enabled ? "visible" : "none");
+                } catch (e) {
+                    console.warn("GOONG_NATIVE_3D_VISIBILITY_UPDATE_FAILED", layerId, e);
+                }
+
+                try {
+                    map.setPaintProperty(layerId, "fill-extrusion-opacity", enabled ? 1.0 : 0.0);
+                } catch (e) {
+                    console.warn("GOONG_NATIVE_3D_OPACITY_UPDATE_FAILED", layerId, e);
+                }
+            }
+
+            if (map.getLayer(SUPPLEMENTAL_BUILDING_LAYER_ID)) {
+                try {
+                    map.setLayoutProperty(SUPPLEMENTAL_BUILDING_LAYER_ID, "visibility", enabled ? "visible" : "none");
+                } catch (e) {
+                    console.warn("GOONG_SUPPLEMENTAL_3D_VISIBILITY_UPDATE_FAILED", e);
+                }
+
+                try {
+                    map.setPaintProperty(SUPPLEMENTAL_BUILDING_LAYER_ID, "fill-extrusion-opacity", enabled ? 0.96 : 0.0);
+                } catch (e) {
+                    console.warn("GOONG_SUPPLEMENTAL_3D_OPACITY_UPDATE_FAILED", e);
+                }
+            }
+
+            if (map.getLayer(LANDMARK_81_LAYER_ID)) {
+                try {
+                    map.setLayoutProperty(LANDMARK_81_LAYER_ID, "visibility", enabled ? "visible" : "none");
+                } catch (e) {
+                    console.warn("GOONG_LANDMARK81_3D_VISIBILITY_UPDATE_FAILED", e);
+                }
+
+                try {
+                    map.setPaintProperty(LANDMARK_81_LAYER_ID, "fill-extrusion-opacity", enabled ? 0.96 : 0.0);
+                } catch (e) {
+                    console.warn("GOONG_LANDMARK81_3D_OPACITY_UPDATE_FAILED", e);
+                }
+            }
+
+            if (enabled)
+                scheduleSupplementalRefresh();
+        }
+
+        function updateProviderConfig(payload) {
+            let needsReload = false;
+            const nextKey = payload.goongMapTilesKey || goongMapTilesKey;
+            const nextStyle = payload.goongStyleUrl || goongStyleUrl || DEFAULT_GOONG_STYLE_URL;
+            const nextBuildingLayer = payload.buildingSourceLayer || configuredBuildingLayer || DEFAULT_GOONG_BUILDING_LAYER;
+
+            if (nextKey !== goongMapTilesKey) {
+                goongMapTilesKey = nextKey;
+                needsReload = true;
+            }
+
+            if (nextStyle !== goongStyleUrl) {
+                goongStyleUrl = nextStyle;
+                needsReload = true;
+            }
+
+            if (nextBuildingLayer !== configuredBuildingLayer) {
+                configuredBuildingLayer = nextBuildingLayer;
+                needsReload = true;
+            }
+
+            return needsReload;
+        }
+
+        function applyPayload(payload) {
+            if (!payload)
+                return;
+
+            lastPayload = payload;
+
+            if (updateProviderConfig(payload)) {
+                map.setStyle(buildStyleUrl());
+                return;
+            }
+
+            if (!map.isStyleLoaded()) {
+                window.setTimeout(function () {
+                    applyPayload(payload);
+                }, 80);
+                return;
+            }
+
+            const center = pointFeature(payload.center) || DEFAULT_CENTER;
+
+            ensureGoongBuildingLayers();
+            ensureRouteSource();
+            applyRouteLayer();
+
+            const enabled3d = !!payload.enabled3d;
+            const targetPitch = enabled3d
+                    ? (Number.isFinite(payload.pitch) ? payload.pitch : 58)
+                    : 0;
+
+            map.easeTo({
+                center: center,
+                zoom: Number.isFinite(payload.zoom) ? Math.max(payload.zoom, enabled3d ? 15.2 : 2) : map.getZoom(),
+                pitch: targetPitch,
+                bearing: Number.isFinite(payload.bearing) ? payload.bearing : map.getBearing(),
+                duration: 90,
+                essential: true
+            });
+
+            currentMarker = setMarker(currentMarker, payload.current, "#1a73e8");
+            destinationMarker = setMarker(destinationMarker, payload.destination, "#ef4444");
+            setRoute(payload.route);
+            set3d(enabled3d);
+
+            //setDebug(enabled3d ? "GOONG_3D_UPDATE_OK" : "GOONG_2D_UPDATE_OK");
+        }
+
+        window.navigationMap = {
+            resetStyle: function (vectorTileUrl, sourceLayer, goongKey, goongStyle) {
+                configuredBuildingLayer = sourceLayer || DEFAULT_GOONG_BUILDING_LAYER;
+                goongMapTilesKey = goongKey || goongMapTilesKey;
+                goongStyleUrl = goongStyle || goongStyleUrl || DEFAULT_GOONG_STYLE_URL;
+
+                //setDebug("GOONG_RESET_3D_STYLE");
+                map.setStyle(buildStyleUrl());
+            },
+
+            update: function (payload) {
+                applyPayload(payload);
+            }
+        };
+    </script>
+</body>
+</html>

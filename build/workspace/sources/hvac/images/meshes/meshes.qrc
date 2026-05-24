@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>seay_backrest_mesh.mesh</file>
+        <file>seat_base_mesh.mesh</file>
+        <file>plane_008_mesh.mesh</file>
+    </qresource>
+</RCC>

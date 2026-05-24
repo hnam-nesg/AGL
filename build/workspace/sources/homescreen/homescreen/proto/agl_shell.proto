@@ -1,0 +1,110 @@
+syntax = "proto3";
+// using empty Response suitable better for forward compat
+//import "google/protobuf/empty.proto";
+package agl_shell_ipc;
+
+service AglShellManagerService {
+       rpc ActivateApp(ActivateRequest)			returns (ActivateResponse) {}
+       rpc DeactivateApp(DeactivateRequest)		returns (DeactivateResponse) {}
+       rpc SetAppSplit(SplitRequest)			returns (SplitResponse) {}
+       rpc SetAppFloat(FloatRequest)			returns (FloatResponse) {}
+       rpc SetAppFullscreen(FullscreenRequest)		returns (FullscreenResponse) {}
+       rpc AppStatusState(AppStateRequest)		returns (stream AppStateResponse) {}
+       rpc GetOutputs(OutputRequest)			returns (ListOutputResponse) {}
+       rpc SetAppNormal(NormalRequest)			returns (NormalResponse) {}
+       rpc SetAppOnOutput(AppOnOutputRequest)		returns (AppOnOutputResponse) {}
+       rpc SetAppPosition(AppPositionRequest)		returns (AppPositionResponse) {}
+       rpc SetAppScale(AppScaleRequest)			returns (AppScaleResponse) {}
+}
+
+message ActivateRequest {
+       string app_id = 1;
+       string output_name = 2;
+}
+
+message ActivateResponse {
+};
+
+
+message DeactivateRequest {
+       string app_id = 1;
+}
+
+message DeactivateResponse {
+}
+
+message SplitRequest {
+       string app_id = 1;
+       int32 tile_orientation = 2;
+}
+
+message SplitResponse {
+}
+
+message FloatRequest {
+       string app_id = 1;
+       int32 x_pos = 2;
+       int32 y_pos = 3;
+}
+
+message FloatResponse {
+}
+
+message AppStateRequest {
+}
+
+message AppStateResponse {
+	int32 state = 1;
+	string app_id = 2;
+}
+
+message OutputRequest {
+};
+
+message OutputResponse {
+	string name = 1;
+};
+
+message ListOutputResponse {
+	repeated OutputResponse outputs = 1;
+};
+
+message NormalRequest {
+	string app_id = 1;
+};
+
+message NormalResponse {
+};
+
+message FullscreenRequest {
+	string app_id = 1;
+};
+
+message FullscreenResponse {
+};
+
+message AppOnOutputRequest {
+	string app_id = 1;
+	string output = 2;
+};
+
+message AppOnOutputResponse {
+};
+
+message AppPositionRequest {
+       string app_id = 1;
+       int32 x = 2;
+       int32 y = 3;
+};
+
+message AppPositionResponse {
+};
+
+message AppScaleRequest {
+       string app_id = 1;
+       int32 width = 2;
+       int32 height = 3;
+};
+
+message AppScaleResponse {
+};

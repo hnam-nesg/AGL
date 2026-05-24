@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="images/">
+        <file>drive-mode-eco.png</file>
+        <file>drive-mode-normal.png</file>
+        <file>Roboto-BoldCondensed.ttf</file>
+        <file>drive-mode-sport.png</file>
+        <file>line_devider.png</file>
+        <file>mirror-left.png</file>
+        <file>mirror-right.png</file>
+    </qresource>
+</RCC>

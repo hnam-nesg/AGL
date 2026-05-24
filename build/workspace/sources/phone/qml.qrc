@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>ButtonControl.qml</file>
+        <file>Phone.qml</file>
+    </qresource>
+</RCC>

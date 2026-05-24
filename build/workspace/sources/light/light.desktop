@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AGL Light
+Comment=AGL Light Qt Application
+Exec=/usr/bin/light
+Icon=light
+Type=Application
+Terminal=false
+Categories=Application;

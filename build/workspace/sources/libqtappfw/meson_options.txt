@@ -1,0 +1,1 @@
+option('protos', type : 'string', value : '/usr/include', description : 'Include directory for .proto files')

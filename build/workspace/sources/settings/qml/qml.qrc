@@ -1,0 +1,22 @@
+<RCC>
+    <qresource prefix="/">
+        <file>Settings.qml</file>
+        <file>BorderColor.qml</file>
+        <file>ButtonControl.qml</file>
+        <file>Background.qml</file>
+        <file>HL_Button.qml</file>
+        <file>SwitchButton.qml</file>
+        <file>Device.qml</file>
+        <file>Light.qml</file>
+        <file>Display.qml</file>
+        <file>Car.qml</file>
+        <file>Wifi.qml</file>
+        <file>Sound.qml</file>
+        <file>Assistant.qml</file>
+        <file>ColorWheelPicker.qml</file>
+        <file>NeonColorWheelPicker.qml</file>
+        <file>ColorSelectButton.qml</file>
+        <file>NeonComboBox.qml</file>
+        <file>NeonSlider.qml</file>
+    </qresource>
+</RCC>

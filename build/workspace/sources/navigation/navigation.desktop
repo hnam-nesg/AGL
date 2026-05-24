@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AGL Navigation
+Comment=AGL navigation Qt Application
+Exec=/usr/bin/navigation
+Icon=navigation
+Type=Application
+Terminal=false
+Categories=Application;

@@ -1,0 +1,21 @@
+<RCC>
+    <qresource prefix="/">
+        <file>ButtonControl.qml</file>
+        <file>Navigation.qml</file>
+        <file>RouteInfomation.qml</file>
+        <file>RouteListDelegate.qml</file>
+        <file>RouteListHeader.qml</file>
+        <file>TextEffect.qml</file>
+        <file>BorderColor.qml</file>
+        <file>helper.js</file>
+        <file>Background.qml</file>
+        <file>MapIcon.qml</file>
+        <file>MapRoundButton.qml</file>
+        <file>MapKeyboard.qml</file>
+        <file>MapLibreSurface.qml</file>
+        <file>goong-map.html</file>
+        <file>maplibre.html</file>
+        <file>maplibre-gl.js</file>
+        <file>maplibre-gl.css</file>
+    </qresource>
+</RCC>

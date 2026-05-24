@@ -1,0 +1,22 @@
+<RCC>
+    <qresource prefix="/images">
+        <file>blue.jpg</file>
+        <file>center_point.png</file>
+        <file>medium-volume.png</file>
+        <file>high-volume.png</file>
+        <file>low-volume.png</file>
+        <file>mute.png</file>
+        <file>next_.png</file>
+        <file>previous_.png</file>
+        <file>no-sound.png</file>
+        <file>play_.png</file>
+        <file>pause_.png</file>
+        <file>Roboto-BoldCondensed.ttf</file>
+        <file>shuffle.png</file>
+        <file>shuffle_on.png</file>
+        <file>repeat.png</file>
+        <file>repeat_on.png</file>
+        <file>repeat_one_on.png</file>
+        <file>repeat_one.png</file>
+    </qresource>
+</RCC>

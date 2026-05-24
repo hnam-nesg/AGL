@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AGL Hvac
+Comment=AGL hvac Qt Application
+Exec=/usr/bin/hvac
+Icon=hvac
+Type=Application
+Terminal=false
+Categories=Application;

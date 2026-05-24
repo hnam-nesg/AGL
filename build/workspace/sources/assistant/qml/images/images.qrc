@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="images/">
+        <file>mercedes.png</file>
+        <file>account.png</file>
+        <file>mobile_phone.png</file>
+        <file>airbag.svg</file>
+        <file>Roboto-BoldCondensed.ttf</file>
+    </qresource>
+</RCC>

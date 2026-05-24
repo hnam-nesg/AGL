@@ -1,0 +1,67 @@
+<RCC>
+    <qresource prefix="/">
+        <file>ground_001_SOL__shadow_0_mesh.mesh</file>
+        <file>ground_SOL_0_mesh.mesh</file>
+
+        <file>mesh_DoorFL_mat_rubber_0_mesh.mesh</file>
+        <file>mesh_DoorFL_mat_glass_0_mesh.mesh</file>
+        <file>mesh_DoorFL_mat_plastic_0_mesh.mesh</file>
+        <file>mesh_DoorFL_mat_chrome_0_mesh.mesh</file>
+        <file>mesh_DoorFL_mat_lights_0_mesh.mesh</file>
+        <file>mesh_DoorFL_mat_leather_0_mesh.mesh</file>
+        <file>mesh_DoorFL_mat_inside_panel_0_mesh.mesh</file>
+        <file>mesh_DoorFL_mat_salon_0_mesh.mesh</file>
+        <file>mesh_DoorFL_mat_body_0_mesh.mesh</file>
+
+        <file>mesh_DoorFR_mat_body_0_mesh.mesh</file>
+        <file>mesh_DoorFR_mat_rubber_0_mesh.mesh</file>
+        <file>mesh_DoorFR_mat_glass_0_mesh.mesh</file>
+        <file>mesh_DoorFR_mat_plastic_0_mesh.mesh</file>
+        <file>mesh_DoorFR_mat_chrome_0_mesh.mesh</file>
+        <file>mesh_DoorFR_mat_lights_0_mesh.mesh</file>
+        <file>mesh_DoorFR_mat_leather_0_mesh.mesh</file>
+        <file>mesh_DoorFR_mat_inside_panel_0_mesh.mesh</file>
+        <file>mesh_DoorFR_mat_salon_0_mesh.mesh</file>
+
+        <file>mesh_DoorRL_mat_rubber_0_mesh.mesh</file>
+        <file>mesh_DoorRL_mat_glass_0_mesh.mesh</file>
+        <file>mesh_DoorRL_mat_plastic_0_mesh.mesh</file>
+        <file>mesh_DoorRL_mat_chrome_0_mesh.mesh</file>
+        <file>mesh_DoorRL_mat_leather_0_mesh.mesh</file>
+        <file>mesh_DoorRL_mat_inside_panel_0_mesh.mesh</file>
+        <file>mesh_DoorRL_mat_salon_0_mesh.mesh</file>
+        <file>mesh_DoorRL_mat_body_0_mesh.mesh</file>
+
+        <file>mesh_DoorRR_mat_body_0_mesh.mesh</file>
+        <file>mesh_DoorRR_mat_rubber_0_mesh.mesh</file>
+        <file>mesh_DoorRR_mat_glass_0_mesh.mesh</file>
+        <file>mesh_DoorRR_mat_plastic_0_mesh.mesh</file>
+        <file>mesh_DoorRR_mat_chrome_0_mesh.mesh</file>
+        <file>mesh_DoorRR_mat_leather_0_mesh.mesh</file>
+        <file>mesh_DoorRR_mat_inside_panel_0_mesh.mesh</file>
+        <file>mesh_DoorRR_mat_salon_0_mesh.mesh</file>
+
+        <file>mesh_Hood_mat_body_0_mesh.mesh</file>
+        <file>mesh_Hood_mat_plastic_0_mesh.mesh</file>
+        <file>mesh_Hood_mat_chrome_0_mesh.mesh</file>
+
+        <file>mesh_WheelFL_mat_wheels_0_mesh.mesh</file>
+        <file>mesh_WheelFL_mat_tires_0_mesh.mesh</file>
+        <file>mesh_WheelRR_mat_wheels_0_mesh.mesh</file>
+        <file>mesh_WheelRR_mat_tires_0_mesh.mesh</file>
+
+        <file>mesh_Body_mat_body_0_mesh.mesh</file>
+        <file>mesh_Body_mat_bottom_0_mesh.mesh</file>
+        <file>mesh_Body_mat_glass_0_mesh.mesh</file>
+        <file>mesh_Body_mat_plastic_0_mesh.mesh</file>
+        <file>mesh_Body_mat_chrome_0_mesh.mesh</file>
+        <file>mesh_Body_mat_lights_glass_0_mesh.mesh</file>
+        <file>mesh_Body_mat_lights_glass2_0_mesh.mesh</file>
+        <file>mesh_Body_mat_lights_0_mesh.mesh</file>
+        <file>mesh_Body_mat_inside_gauges_0_mesh.mesh</file>
+        <file>mesh_Body_mat_leather_0_mesh.mesh</file>
+        <file>mesh_Body_mat_inside_panel_0_mesh.mesh</file>
+        <file>mesh_Body_mat_salon_0_mesh.mesh</file>
+        <file>mesh_Body_mat_rubber_0_mesh.mesh</file>
+    </qresource>
+</RCC>

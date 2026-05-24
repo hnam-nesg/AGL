@@ -1,0 +1,205 @@
+syntax = "proto3";
+
+package automotivegradelinux;
+
+service Radio {
+  rpc GetFrequency(GetFrequencyRequest) returns (GetFrequencyResponse) {}
+  rpc SetFrequency(SetFrequencyRequest) returns (SetFrequencyResponse) {}
+
+  rpc GetBand(GetBandRequest) returns (GetBandResponse) {}
+  rpc SetBand(SetBandRequest) returns (SetBandResponse) {}
+
+  rpc GetBandSupported(GetBandSupportedRequest) returns (GetBandSupportedResponse) {}
+  rpc GetBandParameters(GetBandParametersRequest) returns (GetBandParametersResponse) {}
+
+  rpc GetStereoMode(GetStereoModeRequest) returns (GetStereoModeResponse) {}
+  rpc SetStereoMode(SetStereoModeRequest) returns (SetStereoModeResponse) {}
+
+  rpc Start(StartRequest) returns (StartResponse) {}
+  rpc Stop(StopRequest) returns (StopResponse) {}
+
+  rpc ScanStart(ScanStartRequest) returns (ScanStartResponse) {}
+  rpc ScanStop(ScanStopRequest) returns (ScanStopResponse) {}
+
+  rpc GetRDS(GetRDSRequest) returns (GetRDSResponse) {}
+
+  rpc GetQuality(GetQualityRequest) returns (GetQualityResponse) {}
+
+  rpc SetAlternativeFrequency(SetAlternativeFrequencyRequest) returns (SetAlternativeFrequencyResponse) {}
+
+  rpc GetStatusEvents(StatusRequest) returns (stream StatusResponse) {}
+}
+
+message GetFrequencyRequest {
+}
+
+message GetFrequencyResponse {
+  uint32 frequency = 1;
+}
+
+message SetFrequencyRequest {
+  uint32 frequency = 1;
+}
+
+message SetFrequencyResponse {
+  uint32 frequency = 1;
+}
+
+message GetBandRequest {
+}
+
+enum Band {
+  BAND_UNSPECIFIED = 0;
+  BAND_AM = 1;
+  BAND_FM = 2;
+  BAND_DBS = 3;
+}
+
+message GetBandResponse {
+  Band band = 1;
+}
+
+message SetBandRequest {
+  Band band = 1;
+}
+
+message SetBandResponse {
+  Band band = 1;
+}
+
+message GetBandSupportedRequest {
+  Band band = 1;
+}
+
+message GetBandSupportedResponse {
+  bool supported = 1;
+}
+
+message GetBandParametersRequest {
+  Band band = 1;
+}
+
+message GetBandParametersResponse {
+  uint32 min = 1;
+  uint32 max = 2;
+  uint32 step = 3;
+}
+
+enum StereoMode {
+  STEREO_MODE_UNSPECIFIED = 0;
+  STEREO_MODE_MONO = 1;
+  STEREO_MODE_STEREO = 2;
+}
+
+message GetStereoModeRequest {
+}
+
+message GetStereoModeResponse {
+  StereoMode mode = 1;
+}
+
+message SetStereoModeRequest {
+  StereoMode mode = 1;
+}
+
+message SetStereoModeResponse {
+  StereoMode mode = 1;
+}
+
+message StartRequest {
+}
+
+message StartResponse {
+}
+
+message StopRequest {
+}
+
+message StopResponse {
+}
+
+enum ScanDirection {
+  SCAN_DIRECTION_UNSPECIFIED = 0;
+  SCAN_DIRECTION_FORWARD = 1;
+  SCAN_DIRECTION_BACKWARD = 2;
+}
+
+message ScanStartRequest {
+  ScanDirection direction = 1;
+}
+
+message ScanStartResponse {
+}
+
+message ScanStopRequest {
+}
+
+message ScanStopResponse {
+}
+
+message GetRDSRequest {
+}
+
+// NOTE: This is a placeholder and will be revised!
+message GetRDSResponse {
+  string name = 1;
+  string radio_text = 2;
+  string alternatives = 3;
+  string minute = 4;
+  string hour = 5;
+  string day = 6;
+  string month = 7;
+  string year = 8;
+  string pi = 9;
+  string pty = 10;
+  string ta = 11;
+  string tp = 12;
+  string ms = 13;
+}
+
+message GetQualityRequest {
+}
+
+message GetQualityResponse {
+}
+
+message SetAlternativeFrequencyRequest {
+  uint32 frequency = 1;
+}
+
+message SetAlternativeFrequencyResponse {
+  uint32 frequency = 1;
+}
+
+message StatusRequest {
+}
+
+message BandStatus {
+  Band band = 1;
+}
+
+message FrequencyStatus {
+  uint32 frequency = 1;
+}
+
+message PlayStatus {
+  bool playing = 1;
+}
+
+message ScanStatus {
+  bool station_found = 1;
+}
+
+message StereoStatus {
+  StereoMode mode = 1;
+}
+
+message StatusResponse {
+  oneof status {
+    BandStatus band = 1;
+    FrequencyStatus frequency = 2;
+    PlayStatus play = 3;
+    StereoStatus stereo = 4;
+    ScanStatus scan = 5;
+  }
+}

@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/">
+        <file>MediaPlayer.qml</file>
+        <file>BorderColor.qml</file>
+        <file>ButtonControl.qml</file>
+        <file>Background.qml</file>
+    </qresource>
+</RCC>

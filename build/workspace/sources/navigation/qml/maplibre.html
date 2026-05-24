@@ -1,0 +1,562 @@
+<!doctype html>
+<html>
+<head>
+    <!-- Legacy local OpenMapTiles renderer: kept for rollback, not used by default.
+         Active renderer is qml/goong-map.html via MapLibreSurface.rendererUrl. -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="qrc:/maplibre-gl.css">
+
+    <style>
+        html,
+        body,
+        #map {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #dfe7ef;
+        }
+
+        .maplibregl-ctrl-logo,
+        .maplibregl-ctrl-attrib {
+            display: none !important;
+        }
+
+        #debug {
+            position: absolute;
+            left: 10px;
+            bottom: 10px;
+            z-index: 9999;
+            padding: 6px 10px;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.62);
+            color: white;
+            font-family: sans-serif;
+            font-size: 13px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="debug">MapLibre 3D loading...</div>
+
+    <script src="qrc:/maplibre-gl.js"></script>
+
+    <script>
+        console.log("MAPLIBRE_HTML_VERSION_3D_EXTRUSION_2026_05_08");
+
+        const DEFAULT_CENTER = [106.70290, 10.80690];
+
+        const EMPTY_ROUTE = {
+            type: "Feature",
+            geometry: {
+                type: "LineString",
+                coordinates: []
+            },
+            properties: {}
+        };
+
+        let currentMarker = null;
+        let destinationMarker = null;
+        let buildingSourceLayer = "building";
+        let activeVectorTileUrl = "http://127.0.0.1:8080/data/v3.json";
+        let lastPayload = null;
+        let map3dActive = true;
+        let cameraLogTimer = null;
+
+        function setDebug(text) {
+            const el = document.getElementById("debug");
+            if (el)
+                el.textContent = text;
+            console.log("MAP_DEBUG=" + text);
+        }
+
+        function pointFeature(point) {
+            if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lon))
+                return null;
+
+            return [point.lon, point.lat];
+        }
+
+        function safeStringifyError(err) {
+            if (!err)
+                return "unknown error";
+
+            try {
+                return JSON.stringify({
+                    message: err.message ? err.message : String(err),
+                    status: err.status,
+                    statusText: err.statusText,
+                    url: err.url
+                });
+            } catch (e) {
+                return String(err);
+            }
+        }
+
+        function vectorStyle(vectorTileUrl) {
+            const vectorSource = {
+                type: "vector"
+            };
+
+            if (vectorTileUrl.indexOf("{z}") !== -1) {
+                vectorSource.tiles = [vectorTileUrl];
+                vectorSource.maxzoom = 14;
+            } else {
+                vectorSource.url = vectorTileUrl;
+            }
+
+            return {
+                version: 8,
+                light: {
+                    anchor: "viewport",
+                    color: "#ffffff",
+                    intensity: 0.62,
+                    position: [1.25, 210, 32]
+                },
+                sources: {
+                    openmaptiles: vectorSource
+                },
+                layers: [
+                    {
+                        id: "background",
+                        type: "background",
+                        paint: {
+                            "background-color": "#dfe7ef"
+                        }
+                    },
+                    {
+                        id: "landuse",
+                        type: "fill",
+                        source: "openmaptiles",
+                        "source-layer": "landuse",
+                        paint: {
+                            "fill-color": [
+                                "match",
+                                ["get", "class"],
+                                "residential", "#e3dfd4",
+                                "commercial", "#e7d8cf",
+                                "industrial", "#d8d9dc",
+                                "park", "#cfe3c3",
+                                "#d9e5d2"
+                            ],
+                            "fill-opacity": 0.82
+                        }
+                    },
+                    {
+                        id: "water",
+                        type: "fill",
+                        source: "openmaptiles",
+                        "source-layer": "water",
+                        paint: {
+                            "fill-color": "#79b7df"
+                        }
+                    },
+                    {
+                        id: "road-casing",
+                        type: "line",
+                        source: "openmaptiles",
+                        "source-layer": "transportation",
+                        paint: {
+                            "line-color": "#b7c0ca",
+                            "line-width": [
+                                "interpolate",
+                                ["linear"],
+                                ["zoom"],
+                                10, 1.4,
+                                14, 3.4,
+                                18, 12
+                            ]
+                        }
+                    },
+                    {
+                        id: "road",
+                        type: "line",
+                        source: "openmaptiles",
+                        "source-layer": "transportation",
+                        paint: {
+                            "line-color": "#ffffff",
+                            "line-width": [
+                                "interpolate",
+                                ["linear"],
+                                ["zoom"],
+                                10, 0.8,
+                                14, 2.2,
+                                18, 9
+                            ]
+                        }
+                    },
+                    {
+                        id: "building-footprint",
+                        type: "fill",
+                        source: "openmaptiles",
+                        "source-layer": buildingSourceLayer,
+                        minzoom: 13,
+                        paint: {
+                            "fill-color": [
+                                "interpolate",
+                                ["linear"],
+                                ["to-number", ["get", "render_height"], 14],
+                                0, "#ddd2bf",
+                                12, "#d9b184",
+                                35, "#ca7d5a",
+                                75, "#9f5966"
+                            ],
+                            "fill-opacity": 0.62
+                        }
+                    },
+                    {
+                        id: "building-outline",
+                        type: "line",
+                        source: "openmaptiles",
+                        "source-layer": buildingSourceLayer,
+                        minzoom: 13,
+                        paint: {
+                            "line-color": "#6b5948",
+                            "line-opacity": 0.46,
+                            "line-width": [
+                                "interpolate",
+                                ["linear"],
+                                ["zoom"],
+                                13, 0.25,
+                                16, 0.75,
+                                18, 1.25
+                            ]
+                        }
+                    },
+                    {
+                        id: "building-3d",
+                        type: "fill-extrusion",
+                        source: "openmaptiles",
+                        "source-layer": buildingSourceLayer,
+                        minzoom: 13,
+                        paint: {
+                            "fill-extrusion-color": [
+                                "interpolate",
+                                ["linear"],
+                                ["to-number", ["get", "render_height"], 14],
+                                0, "#d6c3a4",
+                                10, "#e3a35f",
+                                28, "#d66b3b",
+                                55, "#b64a43",
+                                100, "#79415f"
+                            ],
+                            "fill-extrusion-height": [
+                                "*",
+                                [
+                                    "max",
+                                    ["to-number", ["get", "render_height"], 14],
+                                    6
+                                ],
+                                1.65
+                            ],
+                            "fill-extrusion-base": [
+                                "to-number",
+                                ["get", "render_min_height"],
+                                0
+                            ],
+                            "fill-extrusion-opacity": 0.96,
+                            "fill-extrusion-vertical-gradient": true
+                        }
+                    }
+                ]
+            };
+        }
+
+        const map = new maplibregl.Map({
+            container: "map",
+            style: vectorStyle(activeVectorTileUrl),
+            center: DEFAULT_CENTER,
+            zoom: 16.6,
+            pitch: 58,
+            bearing: -18,
+            antialias: true,
+            attributionControl: false
+        });
+
+        function enableNativeInteraction() {
+            [
+                "dragPan",
+                "scrollZoom",
+                "boxZoom",
+                "doubleClickZoom",
+                "dragRotate",
+                "touchZoomRotate",
+                "keyboard"
+            ].forEach(function (handlerName) {
+                try {
+                    if (map[handlerName] && map[handlerName].enable)
+                        map[handlerName].enable();
+                } catch (e) {
+                    console.warn("MAPLIBRE_INTERACTION_ENABLE_FAILED", handlerName, e);
+                }
+            });
+
+            try {
+                if (map.touchPitch && map.touchPitch.enable)
+                    map.touchPitch.enable();
+            } catch (e) {
+                console.warn("MAPLIBRE_TOUCH_PITCH_ENABLE_FAILED", e);
+            }
+        }
+
+        enableNativeInteraction();
+
+        function sendCameraToQml() {
+            window.clearTimeout(cameraLogTimer);
+            cameraLogTimer = window.setTimeout(function () {
+                const center = map.getCenter();
+                console.log("MAPLIBRE_CAMERA=" + JSON.stringify({
+                    lat: center.lat,
+                    lon: center.lng,
+                    zoom: map.getZoom(),
+                    pitch: map.getPitch(),
+                    bearing: map.getBearing()
+                }));
+            }, 40);
+        }
+
+        map.on("movestart", function (e) {
+            if (e && e.originalEvent)
+                console.log("MAPLIBRE_USER_GESTURE_START");
+        });
+        map.on("moveend", sendCameraToQml);
+        map.on("zoomend", sendCameraToQml);
+        map.on("rotateend", sendCameraToQml);
+        map.on("pitchend", sendCameraToQml);
+
+        function resizeMapSoon() {
+            [0, 120, 500, 1200].forEach(function (delay) {
+                window.setTimeout(function () {
+                    try {
+                        map.resize();
+                    } catch (e) {
+                        console.warn("MAPLIBRE_RESIZE_FAILED", e);
+                    }
+                }, delay);
+            });
+        }
+
+        window.addEventListener("resize", resizeMapSoon);
+        resizeMapSoon();
+
+        map.on("load", function () {
+            console.log("MAPLIBRE_LOAD_OK");
+            setDebug("MAPLIBRE_3D_LOAD_OK");
+            resizeMapSoon();
+
+            ensureRouteSource();
+            applyRouteLayer();
+            set3d(true);
+
+            if (lastPayload)
+                applyPayload(lastPayload);
+        });
+
+        map.on("style.load", function () {
+            console.log("MAPLIBRE_STYLE_LOAD_OK");
+            resizeMapSoon();
+
+            ensureRouteSource();
+            applyRouteLayer();
+            set3d(map3dActive);
+
+            if (lastPayload)
+                applyPayload(lastPayload);
+        });
+
+        map.on("error", function (e) {
+            const err = e && e.error ? e.error : e;
+            const text = "MAPLIBRE_ERROR=" + safeStringifyError(err);
+            console.error(text);
+            setDebug(text);
+        });
+
+        function ensureRouteSource() {
+            if (!map.isStyleLoaded())
+                return false;
+
+            if (!map.getSource("navigation-route")) {
+                map.addSource("navigation-route", {
+                    type: "geojson",
+                    data: EMPTY_ROUTE
+                });
+            }
+
+            return true;
+        }
+
+        function marker(color) {
+            const element = document.createElement("div");
+            element.style.width = "20px";
+            element.style.height = "20px";
+            element.style.borderRadius = "50%";
+            element.style.background = color;
+            element.style.border = "3px solid #ffffff";
+            element.style.boxShadow = "0 2px 10px rgba(0,0,0,.35)";
+            return element;
+        }
+
+        function setMarker(existing, point, color) {
+            const coord = pointFeature(point);
+
+            if (!coord) {
+                if (existing)
+                    existing.remove();
+                return null;
+            }
+
+            if (!existing) {
+                existing = new maplibregl.Marker({
+                    element: marker(color),
+                    rotationAlignment: "map"
+                });
+            }
+
+            existing.setLngLat(coord).addTo(map);
+            return existing;
+        }
+
+        function routeFeature(route) {
+            return {
+                type: "Feature",
+                geometry: {
+                    type: "LineString",
+                    coordinates: Array.isArray(route) ? route : []
+                },
+                properties: {}
+            };
+        }
+
+        function setRoute(route) {
+            if (!ensureRouteSource())
+                return;
+
+            const source = map.getSource("navigation-route");
+            if (source)
+                source.setData(routeFeature(route));
+        }
+
+        function applyRouteLayer() {
+            if (!ensureRouteSource())
+                return;
+
+            if (!map.getLayer("navigation-route-casing")) {
+                map.addLayer({
+                    id: "navigation-route-casing",
+                    type: "line",
+                    source: "navigation-route",
+                    layout: {
+                        "line-cap": "round",
+                        "line-join": "round"
+                    },
+                    paint: {
+                        "line-color": "#ffffff",
+                        "line-width": 13,
+                        "line-opacity": 0.85
+                    }
+                });
+            }
+
+            if (!map.getLayer("navigation-route-line")) {
+                map.addLayer({
+                    id: "navigation-route-line",
+                    type: "line",
+                    source: "navigation-route",
+                    layout: {
+                        "line-cap": "round",
+                        "line-join": "round"
+                    },
+                    paint: {
+                        "line-color": "#1a73e8",
+                        "line-width": 8,
+                        "line-opacity": 0.95
+                    }
+                });
+            }
+        }
+
+        function set3d(enabled) {
+            map3dActive = !!enabled;
+
+            if (map.getLayer("building-3d"))
+                map.setPaintProperty("building-3d", "fill-extrusion-opacity", enabled ? 0.96 : 0);
+
+            if (map.getLayer("building-footprint"))
+                map.setPaintProperty("building-footprint", "fill-opacity", enabled ? 0.28 : 0.72);
+
+            if (map.getLayer("building-outline"))
+                map.setPaintProperty("building-outline", "line-opacity", enabled ? 0.55 : 0.34);
+        }
+
+        function applyPayload(payload) {
+            if (!payload)
+                return;
+
+            lastPayload = payload;
+
+            if (!map.isStyleLoaded()) {
+                window.setTimeout(function () {
+                    applyPayload(payload);
+                }, 80);
+                return;
+            }
+
+            const center = pointFeature(payload.center) || DEFAULT_CENTER;
+
+            ensureRouteSource();
+            applyRouteLayer();
+
+            const enabled3d = !!payload.enabled3d;
+            const targetPitch = enabled3d
+                    ? (Number.isFinite(payload.pitch) ? payload.pitch : 58)
+                    : 0;
+
+            map.easeTo({
+                center: center,
+                zoom: Number.isFinite(payload.zoom) ? Math.max(payload.zoom, enabled3d ? 15.2 : 2) : map.getZoom(),
+                pitch: targetPitch,
+                bearing: Number.isFinite(payload.bearing) ? payload.bearing : map.getBearing(),
+                duration: 90,
+                essential: true
+            });
+
+            currentMarker = setMarker(currentMarker, payload.current, "#1a73e8");
+            destinationMarker = setMarker(destinationMarker, payload.destination, "#ef4444");
+            setRoute(payload.route);
+            set3d(enabled3d);
+
+            setDebug(enabled3d ? "MAPLIBRE_3D_UPDATE_OK" : "MAPLIBRE_2D_UPDATE_OK");
+        }
+
+        window.navigationMap = {
+            resetStyle: function (vectorTileUrl, sourceLayer) {
+                activeVectorTileUrl = vectorTileUrl || activeVectorTileUrl;
+                buildingSourceLayer = sourceLayer || "building";
+
+                setDebug("MAPLIBRE_RESET_3D_STYLE");
+                map.setStyle(vectorStyle(activeVectorTileUrl));
+            },
+
+            update: function (payload) {
+                if (!payload)
+                    return;
+
+                if (payload.vectorTileUrl && payload.vectorTileUrl !== activeVectorTileUrl) {
+                    activeVectorTileUrl = payload.vectorTileUrl;
+                    buildingSourceLayer = payload.buildingSourceLayer || "building";
+                    lastPayload = payload;
+                    map.setStyle(vectorStyle(activeVectorTileUrl));
+                    return;
+                }
+
+                applyPayload(payload);
+            }
+        };
+    </script>
+</body>
+</html>

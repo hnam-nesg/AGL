@@ -1,0 +1,34 @@
+<RCC>
+    <qresource prefix="/">
+        <file>textureData104.jpg</file>
+        <file>textureData106.png</file>
+        <file>textureData90.png</file>
+        <file>textureData86.jpg</file>
+        <file>textureData108.png</file>
+        <file>textureData50.png</file>
+        <file>textureData88.png</file>
+        <file>textureData41.jpg</file>
+        <file>textureData43.png</file>
+        <file>textureData48.png</file>
+        <file>textureData202.png</file>
+        <file>textureData206.png</file>
+        <file>textureData204.png</file>
+        <file>textureData55.jpg</file>
+        <file>textureData57.png</file>
+        <file>textureData59.png</file>
+        <file>textureData77.png</file>
+        <file>textureData113.png</file>
+        <file>textureData73.png</file>
+        <file>textureData75.png</file>
+        <file>textureData95.jpg</file>
+        <file>textureData97.png</file>
+        <file>textureData99.png</file>
+        <file>textureData81.png</file>
+        <file>textureData64.jpg</file>
+        <file>textureData68.png</file>
+        <file>textureData193.png</file>
+        <file>textureData195.png</file>
+        <file>textureData197.png</file>
+        <file>textureData66.png</file>
+    </qresource>
+</RCC>

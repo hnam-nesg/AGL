@@ -1,0 +1,40 @@
+<RCC>
+    <qresource prefix="/images">
+        <file>qwantani_mid_morning_puresky_1k.hdr</file>
+        <file>Roboto-BoldCondensed.ttf</file>
+        <file>background.png</file>
+        <file>seat_FL_-1.png</file>
+        <file>seat_FL_-2.png</file>
+        <file>seat_FL_-3.png</file>
+        <file>seat_FL_1.png</file>
+        <file>seat_FL_2.png</file>
+        <file>seat_FL_3.png</file>
+        <file>seat_FR_-1.png</file>
+        <file>seat_FR_-2.png</file>
+        <file>seat_FR_-3.png</file>
+        <file>seat_FR_1.png</file>
+        <file>seat_FR_2.png</file>
+        <file>seat_FR_3.png</file>
+        <file>seat_RL_-1.png</file>
+        <file>seat_RL_-2.png</file>
+        <file>seat_RL_-3.png</file>
+        <file>seat_RL_1.png</file>
+        <file>seat_RL_2.png</file>
+        <file>seat_RL_3.png</file>
+        <file>seat_RR_-1.png</file>
+        <file>seat_RR_-2.png</file>
+        <file>seat_RR_-3.png</file>
+        <file>seat_RR_1.png</file>
+        <file>seat_RR_2.png</file>
+        <file>seat_RR_3.png</file>
+        <file>icon.png</file>
+        <file>foot_outlet.png</file>
+        <file>foot_face_outlet.png</file>
+        <file>mercedes_air.png</file>
+        <file>face_outlet.png</file>
+        <file>fresh_air.png</file>
+        <file>thermometer.png</file>
+        <file>ac.png</file>
+        <file>auto.png</file>
+    </qresource>
+</RCC>

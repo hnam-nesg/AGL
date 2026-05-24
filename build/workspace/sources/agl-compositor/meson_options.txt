@@ -1,0 +1,31 @@
+option(
+	'policy-default',
+	type: 'combo',
+	choices: [ 'auto', 'allow-all', 'deny-all', 'rba' ],
+	value: 'allow-all',
+	description: 'Default policy when no specific policy was set'
+)
+option(
+        'grpc-proxy',
+        type: 'boolean',
+        value: true,
+        description: 'Build gRPC proxy which exposes some of the agl-shell protocol over a gRPC API'
+)
+option(
+    'xwayland',
+    type: 'boolean',
+    value: false,
+    description: 'Build compositor with XWayland support. Disabled by default'
+)
+option(
+        'xwayland-path',
+        type: 'string',
+        value: '/usr/bin/Xwayland',
+        description: 'Xwayland: path to installed Xwayland binary'
+)
+option(
+	'drm-lease',
+	type: 'boolean',
+	value: false,
+	description: 'Support for running weston with a leased DRM Master'
+)

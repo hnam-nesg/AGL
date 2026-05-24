@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/">
+        <file>bluetoothmanager.h</file>
+        <file>bluetoothmanager.cpp</file>
+        <file>bluetoothworker.h</file>
+        <file>bluetoothworker.cpp</file>
+    </qresource>
+</RCC>

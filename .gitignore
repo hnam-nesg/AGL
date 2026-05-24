@@ -3,8 +3,6 @@
 .repo/
 
 # Yocto / AGL build output
-build/
-build-*/
 tmp/
 tmp-*/
 tmp-glibc/
@@ -12,8 +10,6 @@ downloads/
 sstate-cache/
 cache/
 deploy/
-work/
-workspace/
 
 # Common generated folders
 out/

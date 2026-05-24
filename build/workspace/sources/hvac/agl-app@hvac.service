@@ -1,0 +1,17 @@
+[Unit]
+Description=AGL Hvac Service
+After=homescreen.service applaunchd.service launcher.service
+Wants=homescreen.service applaunchd.service launcher.service
+
+[Service]
+Type=simple
+User=agl-driver
+Environment=QT_QPA_PLATFORM=wayland
+Environment=LANG=C.UTF-8
+Environment=XDG_RUNTIME_DIR=/run/user/1001
+Environment=WAYLAND_DISPLAY=wayland-0
+ExecStart=/usr/bin/hvac
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

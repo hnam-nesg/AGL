@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/">
+        <file>HVAC.qml</file>
+        <file>SlideBar.qml</file>
+        <file>BorderColor.qml</file>
+        <file>ButtonControl.qml</file>
+        <file>Background.qml</file>
+        <file>BluePanel.qml</file>
+        <file>WindSlideBar.qml</file>
+        <file>HL_Button.qml</file>
+        <file>WindFlowShader.qml</file>
+    </qresource>
+</RCC>

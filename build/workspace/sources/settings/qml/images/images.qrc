@@ -1,0 +1,14 @@
+<RCC>
+    <qresource prefix="/images">
+        <file>bluetooth.png</file>
+        <file>wifi.png</file>
+        <file>light_settings.png</file>
+        <file>car_settings.png</file>
+        <file>line_devider.png</file>
+        <file>mobile_phone.png</file>
+        <file>screen.png</file>
+        <file>volume.png</file>
+        <file>voice.png</file>
+        <file>Roboto-BoldCondensed.ttf</file>
+    </qresource>
+</RCC>

@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/">
+        <file>main.cpp</file>
+        <file>audiocontroller.h</file>
+        <file>audiocontroller.cpp</file>
+        <file>bluetoothmediaplayer.h</file>
+        <file>bluetoothmediaplayer.cpp</file>
+        <file>mediadbusservice.h</file>
+        <file>mediadbusservice.cpp</file>
+    </qresource>
+</RCC>

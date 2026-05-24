@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package automotivegradelinux;
+
+service AppLauncher {
+  rpc StartApplication(StartRequest) returns (StartResponse) {}
+  rpc ListApplications(ListRequest) returns (ListResponse) {}
+  rpc GetStatusEvents(StatusRequest) returns (stream StatusResponse) {}
+}
+
+message StartRequest {
+  string id = 1;
+}
+
+message StartResponse {
+  bool status = 1;
+  string message = 2;
+}
+
+message ListRequest {
+}
+
+message ListResponse {
+  repeated AppInfo apps = 1;
+}
+
+message AppInfo {
+  string id = 1;
+  string name = 2;
+  string icon_path = 3;
+}
+
+message StatusRequest {
+}
+
+message AppStatus {
+  string id = 1;
+  string status = 2;
+}
+
+// Future-proofing for e.g. potentially signaling a list refresh
+message LauncherStatus {
+}
+
+message StatusResponse {
+  oneof status {
+    AppStatus app = 1;
+    LauncherStatus launcher = 2;
+  }
+}

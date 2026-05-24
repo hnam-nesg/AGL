@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AGL Settings
+Comment=AGL Settings Qt Application
+Exec=/usr/bin/settings
+Icon=settings
+Type=Application
+Terminal=false
+Categories=Application;

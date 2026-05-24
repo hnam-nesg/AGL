@@ -1,0 +1,26 @@
+[Unit]
+Description=AGL Navigation Service
+After=homescreen.service
+Wants=homescreen.service
+
+[Service]
+Type=simple
+User=agl-driver
+Environment=QT_QPA_PLATFORM=wayland
+Environment=LANG=C.UTF-8
+Environment=XDG_RUNTIME_DIR=/run/user/1001
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=QSG_RHI_BACKEND=opengl
+Environment=QT_OPENGL=es2
+Environment=NAVIGATION_MBTILES=/usr/share/navigation/maps/vietnam.mbtiles
+Environment=GOONG_STYLE_URL=https://tiles.goong.io/assets/goong_map_web.json
+# /etc/default/navigation-goong:
+# GOONG_MAPTILES_KEY=...
+# GOONG_REST_API_KEY=...
+EnvironmentFile=-/etc/default/navigation-goong
+Environment="QTWEBENGINE_CHROMIUM_FLAGS=--disable-vulkan --disable-features=Vulkan --use-gl=egl --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox"
+ExecStart=/usr/bin/navigation
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
