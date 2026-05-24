@@ -1,0 +1,91 @@
+<RCC>
+    <qresource prefix="/myCluster">
+        <file>Main.qml</file>
+        <file>QML/CarView3D.qml</file>
+        <file>QML/ClusterMapLibre.qml</file>
+        <file>QML/CircularGaugeMeter.qml</file>
+        <file>QML/IconButton.qml</file>
+        <file>QML/Scene.qml</file>
+        <file>QML/StartupSplash.qml</file>
+    </qresource>
+    <qresource prefix="/">
+        <file alias="goong-map.html">QML/goong-map.html</file>
+        <file alias="maplibre-gl.js">QML/maplibre-gl.js</file>
+        <file alias="maplibre-gl.css">QML/maplibre-gl.css</file>
+    </qresource>
+    <qresource prefix="/">
+        <file>asset/fontawesome.otf</file>
+        <file>asset/fonts/Roboto-BoldCondensed.ttf</file>
+        <file>asset/Panel.png</file>
+        <file>asset/Panel_1.png</file>
+        <file>asset/Panel_2.png</file>
+        <file>asset/Panel_3.png</file>
+        <file>asset/shade.png</file>
+        <file>asset/Speedometer.png</file>
+        <file>asset/SportCarFloorShadow.png</file>
+        <file>asset/Tacometer.png</file>
+        <file>asset/Top Bar.png</file>
+        <file>asset/tr.jpg</file>
+        <file>asset/icons/icons-left/car-brake-alert.svg</file>
+        <file>asset/icons/icons-left/car-tire-alert.svg</file>
+        <file>asset/icons/icons-left/icon-park-solid_right-two.svg</file>
+        <file>asset/icons/icons-left/icons8-brake-warning-32.png</file>
+        <file>asset/icons/icons-left/icons8-tire-pressure-24.png</file>
+        <file>asset/icons/icons-left/mdi_car-battery.svg</file>
+        <file>asset/icons/icons-left/mdi_car-handbrake.svg</file>
+        <file>asset/icons/icons-left/mdi_car-tire-alert.svg</file>
+        <file>asset/icons/icons-left/mdi_oil.svg</file>
+        <file>asset/icons/icons-left/ph_engine-bold.svg</file>
+        <file>asset/icons/icons-left-checked/icon-park-solid_right-two.svg</file>
+        <file>asset/icons/icons-left-checked/mdi_car-battery.svg</file>
+        <file>asset/icons/icons-left-checked/mdi_car-handbrake.svg</file>
+        <file>asset/icons/icons-left-checked/mdi_car-tire-alert.svg</file>
+        <file>asset/icons/icons-left-checked/mdi_oil.svg</file>
+        <file>asset/icons/icons-left-checked/ph_engine-bold.svg</file>
+        <file>asset/icons/icons-right/car-brake-parking.svg</file>
+        <file>asset/icons/icons-right/car-light-dimmed.svg</file>
+        <file>asset/icons/icons-right/car-light-fog.svg</file>
+        <file>asset/icons/icons-right/icon-park-solid_right-two.svg</file>
+        <file>asset/icons/icons-right/mdi_car-brake-parking.svg</file>
+        <file>asset/icons/icons-right/mdi_car-light-dimmed.svg</file>
+        <file>asset/icons/icons-right/mdi_car-light-fog.svg</file>
+        <file>asset/icons/icons-right/mdi_car-light-high.svg</file>
+        <file>asset/icons/icons-right/mdi_seatbelt.svg</file>
+        <file>asset/icons/icons-right-checked/icon-park-solid_right-two.svg</file>
+        <file>asset/icons/icons-right-checked/mdi_car-brake-parking.svg</file>
+        <file>asset/icons/icons-right-checked/mdi_car-light-dimmed.svg</file>
+        <file>asset/icons/icons-right-checked/mdi_car-light-fog.svg</file>
+        <file>asset/icons/icons-right-checked/mdi_car-light-high.svg</file>
+        <file>asset/icons/icons-right-checked/mdi_seatbelt.svg</file>
+        <file>asset/icons/Road/car.png</file>
+        <file>asset/icons/Road/carRoad.svg</file>
+        <file>asset/icons/Road/Frame 33.png</file>
+        <file>asset/icons/Road/mdi_clock-time-four-outline.svg</file>
+        <file>asset/icons/Road/mdi_map-marker-outline.svg</file>
+        <file>asset/icons/Road/mdi_turn-right-bold.svg</file>
+        <file>asset/icons/Road/mingcute_steering-wheel-fill.svg</file>
+        <file>asset/icons/Road/Model-3-2.png</file>
+        <file>asset/icons/Road/road.png</file>
+        <file>asset/icons/Road/road2.png</file>
+        <file>asset/icons/Road/road3.png</file>
+        <file>asset/icons/Road/SpeedLimit.svg</file>
+        <file>asset/icons/Road/ss.svg</file>
+        <file>asset/icons/bg_climate_info_01.png</file>
+        <file>asset/icons/bg_widget_f.png</file>
+        <file>asset/icons/bottom.png</file>
+        <file>asset/icons/cloud.svg</file>
+        <file>asset/icons/desal.svg</file>
+        <file>asset/icons/feaul.svg</file>
+        <file>asset/icons/headlights.png</file>
+        <file>asset/icons/hold.png</file>
+        <file>asset/icons/left.svg</file>
+        <file>asset/icons/line_devider.png</file>
+        <file>asset/icons/right.svg</file>
+        <file>asset/icons/Vector 1.png</file>
+        <file>asset/icons/Vector 1.svg</file>
+        <file>asset/icons/Vector 2.png</file>
+        <file>asset/icons/Vector 2.svg</file>
+        <file>asset/qwantani_mid_morning_puresky_1k.hdr</file>
+        <file>asset/suzuki_logo.png</file>
+    </qresource>
+</RCC>

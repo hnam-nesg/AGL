@@ -1,0 +1,6 @@
+[kuksa-client]
+hostname = "192.168.10.2"
+use-tls = true
+ca-certificate = "/etc/kuksa-val/CA.pem"
+tls-server-name = "localhost"
+authorization = "/etc/xdg/AGL/cluster-dashboard/cluster-dashboard.token"

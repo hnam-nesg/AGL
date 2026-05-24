@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>cluster-dashboard.qml</file>
+        <file>TurnIndicator.qml</file>
+        <file>ValueSource.qml</file>
+    </qresource>
+</RCC>

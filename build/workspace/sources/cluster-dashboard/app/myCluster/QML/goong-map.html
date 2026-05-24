@@ -1,0 +1,2269 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="qrc:/maplibre-gl.css">
+
+    <style>
+        html,
+        body,
+        #map {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #030713;
+        }
+
+        body {
+            position: relative;
+        }
+
+        #map .maplibregl-canvas {
+            filter: saturate(0.86) brightness(0.93) contrast(1.13);
+        }
+
+        #map-vignette {
+            position: absolute;
+            inset: 0;
+            z-index: 5;
+            pointer-events: none;
+            background:
+                radial-gradient(ellipse at center,
+                    rgba(3, 7, 19, 0.00) 0%,
+                    rgba(3, 7, 19, 0.00) 54%,
+                    rgba(3, 7, 19, 0.22) 78%,
+                    rgba(2, 5, 14, 0.78) 100%),
+                linear-gradient(90deg,
+                    rgba(2, 5, 14, 0.64) 0%,
+                    rgba(2, 5, 14, 0.08) 16%,
+                    rgba(2, 5, 14, 0.00) 32%,
+                    rgba(2, 5, 14, 0.00) 68%,
+                    rgba(2, 5, 14, 0.08) 84%,
+                    rgba(2, 5, 14, 0.64) 100%),
+                linear-gradient(180deg,
+                    rgba(2, 5, 14, 0.70) 0%,
+                    rgba(2, 5, 14, 0.07) 18%,
+                    rgba(2, 5, 14, 0.00) 45%,
+                    rgba(2, 5, 14, 0.10) 78%,
+                    rgba(2, 5, 14, 0.74) 100%);
+        }
+
+        #map-vignette::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            backdrop-filter: blur(3px);
+            -webkit-backdrop-filter: blur(3px);
+            -webkit-mask-image: radial-gradient(ellipse at center,
+                    transparent 0%,
+                    transparent 54%,
+                    black 78%,
+                    black 100%);
+            mask-image: radial-gradient(ellipse at center,
+                    transparent 0%,
+                    transparent 54%,
+                    black 78%,
+                    black 100%);
+        }
+
+        .maplibregl-ctrl-logo,
+        .maplibregl-ctrl-attrib {
+            display: none !important;
+        }
+
+        #debug {
+            position: absolute;
+            left: 10px;
+            bottom: 10px;
+            z-index: 9999;
+            padding: 6px 10px;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.62);
+            color: white;
+            font-family: sans-serif;
+            font-size: 13px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="map-vignette"></div>
+
+    <script src="qrc:/maplibre-gl.js"></script>
+
+    <script>
+        console.log("GOONG_MAP_HTML_VERSION_2026_05_12_NATIVE_LANDMARK81_3D");
+
+        const DEFAULT_CENTER = [106.72186, 10.79504];
+        const DEFAULT_DRIVE_END = [106.77193, 10.85056];
+        const DEFAULT_GOONG_STYLE_URL = "https://tiles.goong.io/assets/goong_map_web.json";
+        const DEFAULT_GOONG_BUILDING_LAYER = "VN_Building";
+        const EMPTY_ROUTE = {
+            type: "FeatureCollection",
+            features: []
+        };
+        const BUILDING_ACTIVE_OPACITY = 1.0;
+        const LANDMARK_ACTIVE_OPACITY = 1.0;
+        const DEFAULT_FIRST_PERSON_ZOOM = 18.25;
+        const DEFAULT_FIRST_PERSON_PITCH = 74;
+        const DEFAULT_DRIVE_ANIMATION_DURATION_MS = 26000;
+        const ROUTE_SOURCE_ID = "cluster-navigation-route";
+        const REMAINING_ROUTE_SOURCE_ID = "cluster-navigation-route-remaining";
+        const ROUTE_BASE_LAYER_ID = "cluster-navigation-route-base";
+        const ROUTE_GLOW_LAYER_ID = "cluster-navigation-route-glow";
+        const ROUTE_CASING_LAYER_ID = "cluster-navigation-route-casing";
+        const ROUTE_LINE_LAYER_ID = "cluster-navigation-route-line";
+        const VEHICLE_MARKER_SOURCE_ID = "cluster-navigation-vehicle-source";
+        const VEHICLE_MARKER_GLOW_LAYER_ID = "cluster-navigation-vehicle-glow";
+        const VEHICLE_MARKER_LAYER_ID = "cluster-navigation-vehicle";
+
+        let lastPayload = null;
+        let map3dActive = true;
+        let cameraLogTimer = null;
+        let routeProgressLogTimer = null;
+        let pendingRouteProgressPayload = null;
+        let driveAnimationFrame = 0;
+        let driveAnimationActive = false;
+        let driveLastFrameTime = 0;
+        let driveRouteKey = "";
+        let driveRouteMeasure = null;
+        let driveProgressMeters = 0;
+        let drivePayload = null;
+        let driveSpeedKph = 0;
+        let driveStoppedSpeedThresholdKph = 0.5;
+        let driveCameraBearing = NaN;
+        let drivePausedBySpeed = true;
+        let suppressCameraLogUntil = 0;
+        let activeNavigationSessionId = -1;
+        let clearedNavigationSessionId = -1;
+        let appliedRouteKey = "";
+        let driveVisualProgressMeters = 0;
+        let driveFilteredSpeedMps = 0;
+        let lastRouteVisualUpdateMs = 0;
+        let lastProgressPublishMs = 0;
+        let goongMapTilesKey = "";
+        let goongStyleUrl = DEFAULT_GOONG_STYLE_URL;
+        let configuredBuildingLayer = DEFAULT_GOONG_BUILDING_LAYER;
+        let nativeBuilding3dLayerIds = [];
+        let supplementalRefreshTimer = null;
+        let renderedFootprintLayerIds = [];
+        let styleRetryTimer = null;
+        let styleRetryCount = 0;
+        const SUPPLEMENTAL_BUILDING_LAYER_ID = "goong-building-3d-supplemental";
+        const SUPPLEMENTAL_BUILDING_SOURCE_ID = "goong-building-3d-supplemental-source";
+        const LANDMARK_81_LAYER_ID = "goong-landmark81-3d-correction";
+        const LANDMARK_81_SOURCE_ID = "goong-landmark81-3d-correction-source";
+        const LANDMARK_81_HEIGHT = 461.2;
+        const LANDMARK_81_BOUNDS = {
+            west: 106.72055,
+            south: 10.79405,
+            east: 106.72285,
+            north: 10.79645
+        };
+
+        function setDebug(text) {
+            const el = document.getElementById("debug");
+            if (el)
+                el.textContent = text;
+            console.log("MAP_DEBUG=" + text);
+        }
+
+        function pointFeature(point) {
+            if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lon))
+                return null;
+
+            return [point.lon, point.lat];
+        }
+
+        function safeStringifyError(err) {
+            if (!err)
+                return "unknown error";
+
+            try {
+                return JSON.stringify({
+                    message: err.message ? err.message : String(err),
+                    status: err.status,
+                    statusText: err.statusText,
+                    url: err.url
+                });
+            } catch (e) {
+                return String(err);
+            }
+        }
+
+        function styleUrlWithKey() {
+            const base = goongStyleUrl || DEFAULT_GOONG_STYLE_URL;
+            const separator = base.indexOf("?") === -1 ? "?" : "&";
+
+            if (base.indexOf("api_key=") !== -1 || base.indexOf("access_token=") !== -1)
+                return base;
+
+            return base + separator + "api_key=" + encodeURIComponent(goongMapTilesKey);
+        }
+
+        function buildStyleUrl() {
+            if (!goongMapTilesKey && (goongStyleUrl || DEFAULT_GOONG_STYLE_URL).indexOf("api_key=") === -1) {
+                //setDebug("GOONG_MAPTILES_KEY_MISSING");
+                console.error("GOONG_MAPTILES_KEY_MISSING");
+            }
+
+            return styleUrlWithKey();
+        }
+
+        function scheduleStyleRetry(reason) {
+            window.clearTimeout(styleRetryTimer);
+
+            if (styleRetryCount >= 8) {
+                console.error("GOONG_STYLE_RETRY_GAVE_UP=" + reason);
+                return;
+            }
+
+            const delay = Math.min(12000, 900 * Math.pow(1.55, styleRetryCount));
+            styleRetryCount += 1;
+            console.warn("GOONG_STYLE_RETRY=" + styleRetryCount + " delay=" + Math.round(delay)
+                    + " reason=" + reason);
+
+            styleRetryTimer = window.setTimeout(function () {
+                try {
+                    map.setStyle(buildStyleUrl());
+                } catch (e) {
+                    console.error("GOONG_STYLE_RETRY_FAILED=" + safeStringifyError(e));
+                    scheduleStyleRetry(safeStringifyError(e));
+                }
+            }, delay);
+        }
+
+        const map = new maplibregl.Map({
+            container: "map",
+            style: buildStyleUrl(),
+            center: DEFAULT_CENTER,
+            zoom: 16.6,
+            pitch: 58,
+            minPitch: 0,
+            maxPitch: 80,
+            bearing: -18,
+            antialias: true,
+            attributionControl: false
+        });
+
+        function enableNativeInteraction() {
+            [
+                "dragPan",
+                "scrollZoom",
+                "boxZoom",
+                "doubleClickZoom",
+                "dragRotate",
+                "touchZoomRotate",
+                "keyboard"
+            ].forEach(function (handlerName) {
+                try {
+                    if (map[handlerName] && map[handlerName].enable)
+                        map[handlerName].enable();
+                } catch (e) {
+                    console.warn("GOONG_INTERACTION_ENABLE_FAILED", handlerName, e);
+                }
+            });
+
+            try {
+                if (map.touchPitch && map.touchPitch.enable)
+                    map.touchPitch.enable();
+            } catch (e) {
+                console.warn("GOONG_TOUCH_PITCH_ENABLE_FAILED", e);
+            }
+        }
+
+        enableNativeInteraction();
+
+        function suppressCameraLogs(ms) {
+            suppressCameraLogUntil = Math.max(suppressCameraLogUntil, Date.now() + Math.max(0, ms || 0));
+        }
+
+        function sendCameraToQml() {
+            if (Date.now() < suppressCameraLogUntil)
+                return;
+
+            window.clearTimeout(cameraLogTimer);
+            cameraLogTimer = window.setTimeout(function () {
+                if (Date.now() < suppressCameraLogUntil)
+                    return;
+
+                const center = map.getCenter();
+                console.log("MAPLIBRE_CAMERA=" + JSON.stringify({
+                    lat: center.lat,
+                    lon: center.lng,
+                    zoom: map.getZoom(),
+                    pitch: map.getPitch(),
+                    bearing: map.getBearing()
+                }));
+            }, 40);
+        }
+
+        function sendRouteProgressToQml(progress) {
+            pendingRouteProgressPayload = progress;
+            if (routeProgressLogTimer)
+                return;
+
+            routeProgressLogTimer = window.setTimeout(function () {
+                routeProgressLogTimer = null;
+                if (!pendingRouteProgressPayload)
+                    return;
+
+                console.log("MAPLIBRE_ROUTE_PROGRESS=" + JSON.stringify(pendingRouteProgressPayload));
+                pendingRouteProgressPayload = null;
+            }, 160);
+        }
+
+        map.on("movestart", function (e) {
+            if (e && e.originalEvent) {
+                stopDriveAnimation(false);
+                console.log("MAPLIBRE_USER_GESTURE_START");
+            }
+        });
+        map.on("moveend", sendCameraToQml);
+        map.on("zoomend", sendCameraToQml);
+        map.on("rotateend", sendCameraToQml);
+        map.on("pitchend", sendCameraToQml);
+        map.on("idle", scheduleSupplementalRefresh);
+        map.on("moveend", scheduleSupplementalRefresh);
+        map.on("zoomend", scheduleSupplementalRefresh);
+
+        function resizeMapSoon() {
+            [0, 120, 500, 1200].forEach(function (delay) {
+                window.setTimeout(function () {
+                    try {
+                        map.resize();
+                    } catch (e) {
+                        console.warn("GOONG_RESIZE_FAILED", e);
+                    }
+                }, delay);
+            });
+        }
+
+        window.addEventListener("resize", resizeMapSoon);
+        resizeMapSoon();
+
+        function styleHeightExpression(fallbackHeight) {
+            return [
+                "case",
+                ["has", "__height"], ["to-number", ["get", "__height"], fallbackHeight],
+                ["has", "render_height"], ["to-number", ["get", "render_height"], fallbackHeight],
+                ["has", "height"], ["to-number", ["get", "height"], fallbackHeight],
+                ["has", "building_height"], ["to-number", ["get", "building_height"], fallbackHeight],
+                ["has", "HGT"], ["to-number", ["get", "HGT"], fallbackHeight],
+                ["has", "levels"], ["*", ["to-number", ["get", "levels"], 4], 3.4],
+                ["has", "building:levels"], ["*", ["to-number", ["get", "building:levels"], 4], 3.4],
+                fallbackHeight
+            ];
+        }
+
+	        function buildingMaterialColorExpression(height) {
+	            return [
+	                "interpolate",
+	                ["linear"],
+	                height,
+	                0, "#9ca3af",
+	                24, "#a8afba",
+	                80, "#b4bac5",
+	                180, "#c1c6d0",
+	                360, "#d0d4dc",
+	                470, "#e1e4ea"
+	            ];
+	        }
+
+        function setPaintIfPossible(layerId, property, value) {
+            try {
+                if (map.getLayer(layerId))
+                    map.setPaintProperty(layerId, property, value);
+            } catch (e) {
+                console.warn("GOONG_COLOR_PASS_FAILED", layerId, property, e);
+            }
+        }
+
+        function enhanceGoongMapColors() {
+            if (!map.isStyleLoaded())
+                return false;
+
+            const style = map.getStyle();
+            const layers = style && Array.isArray(style.layers) ? style.layers : [];
+            const buildingHeight = styleHeightExpression(18);
+            const buildingColor = buildingMaterialColorExpression(buildingHeight);
+
+            for (let i = 0; i < layers.length; ++i) {
+                const layer = layers[i];
+                const id = String(layer.id || "").toLowerCase();
+                const sourceLayer = String(layer["source-layer"] || "").toLowerCase();
+                const classLike = id + " " + sourceLayer;
+
+	                if (layer.type === "background") {
+	                    setPaintIfPossible(layer.id, "background-color", "#071120");
+	                } else if (layer.type === "fill" && classLike.indexOf("water") !== -1) {
+	                    setPaintIfPossible(layer.id, "fill-color", "#0a1c31");
+	                    setPaintIfPossible(layer.id, "fill-opacity", 0.95);
+                } else if (layer.type === "fill" &&
+                           (classLike.indexOf("park") !== -1 ||
+                            classLike.indexOf("green") !== -1 ||
+                            classLike.indexOf("landuse") !== -1 ||
+                            classLike.indexOf("landcover") !== -1)) {
+                    setPaintIfPossible(layer.id, "fill-color", [
+                        "match",
+                        ["get", "class"],
+	                        "park", "#10273a",
+	                        "grass", "#0f2435",
+	                        "wood", "#0e2132",
+	                        "residential", "#0e1b2b",
+	                        "commercial", "#112236",
+	                        "industrial", "#101f31",
+	                        "#0d1b2c"
+	                    ]);
+	                    setPaintIfPossible(layer.id, "fill-opacity", 0.92);
+	                } else if (layer.type === "fill" &&
+	                           (classLike.indexOf("building") !== -1 ||
+	                            classLike.indexOf("footprint") !== -1)) {
+	                    setPaintIfPossible(layer.id, "fill-color", "#273244");
+	                    setPaintIfPossible(layer.id, "fill-opacity", 0.68);
+	                } else if (layer.type === "line" &&
+	                           (classLike.indexOf("road") !== -1 ||
+	                            classLike.indexOf("street") !== -1 ||
+	                            classLike.indexOf("transportation") !== -1)) {
+	                    const isMinorRoad = id.indexOf("service") !== -1
+	                            || id.indexOf("street") !== -1
+	                            || id.indexOf("path") !== -1
+	                            || id.indexOf("pedestrian") !== -1
+	                            || id.indexOf("ferry") !== -1
+	                            || id.indexOf("aeroway") !== -1
+	                            || id.indexOf("link") !== -1;
+	                    const isMainRoad = id.indexOf("motorway") !== -1
+	                            || id.indexOf("trunk") !== -1
+	                            || id.indexOf("primary") !== -1
+	                            || id.indexOf("secondary") !== -1
+	                            || id.indexOf("major") !== -1;
+	                    const isRoadCase = id.indexOf("-case") !== -1;
+	                    const isRoadTrack = id.indexOf("track") !== -1;
+
+	                    if (!isMainRoad || isMinorRoad) {
+	                        setPaintIfPossible(layer.id, "line-opacity", 0.0);
+	                        setPaintIfPossible(layer.id, "line-width", 0.0);
+	                    } else if (isRoadCase) {
+	                        setPaintIfPossible(layer.id, "line-color", "#050b18");
+	                        setPaintIfPossible(layer.id, "line-opacity", 0.94);
+	                        setPaintIfPossible(layer.id, "line-width", [
+	                            "interpolate",
+	                            ["linear"],
+	                            ["zoom"],
+	                            12, 1.8,
+	                            15, 7.5,
+	                            17, 18.0,
+	                            19, 34.0
+	                        ]);
+	                    } else if (isRoadTrack) {
+	                        setPaintIfPossible(layer.id, "line-color", "#b8c9ff");
+	                        setPaintIfPossible(layer.id, "line-opacity", 0.44);
+	                        setPaintIfPossible(layer.id, "line-width", [
+	                            "interpolate",
+	                            ["linear"],
+	                            ["zoom"],
+	                            12, 0.4,
+	                            15, 1.2,
+	                            17, 2.1,
+	                            19, 3.0
+	                        ]);
+	                    } else {
+	                        setPaintIfPossible(layer.id, "line-color", "#5d719f");
+	                        setPaintIfPossible(layer.id, "line-opacity", 0.86);
+	                        setPaintIfPossible(layer.id, "line-width", [
+	                            "interpolate",
+	                            ["linear"],
+	                            ["zoom"],
+	                            12, 1.1,
+	                            15, 4.2,
+	                            17, 10.0,
+	                            19, 20.0
+	                        ]);
+	                    }
+	                } else if (layer.type === "fill-extrusion" &&
+                           (classLike.indexOf("building") !== -1 ||
+                            classLike.indexOf("extrusion") !== -1)) {
+                    setPaintIfPossible(layer.id, "fill-extrusion-color", buildingColor);
+                    setPaintIfPossible(layer.id, "fill-extrusion-opacity", map3dActive ? BUILDING_ACTIVE_OPACITY : 0.0);
+                    setPaintIfPossible(layer.id, "fill-extrusion-vertical-gradient", true);
+                } else if (layer.type === "symbol") {
+                    const roadText = classLike.indexOf("road") !== -1
+                            || classLike.indexOf("transportation") !== -1;
+                    setPaintIfPossible(layer.id, "text-color", "#6f7b8f");
+                    setPaintIfPossible(layer.id, "text-halo-color", "#030713");
+                    setPaintIfPossible(layer.id, "text-halo-width", 1.2);
+	                    setPaintIfPossible(layer.id, "text-opacity", 0.0);
+                    setPaintIfPossible(layer.id, "icon-opacity", 0.0);
+                }
+            }
+
+            return true;
+        }
+
+        function ensureGoongBuildingLayers() {
+            if (!map.isStyleLoaded())
+                return false;
+
+            const style = map.getStyle();
+            const layers = style && Array.isArray(style.layers) ? style.layers : [];
+            const wantedLayer = String(configuredBuildingLayer || DEFAULT_GOONG_BUILDING_LAYER).toLowerCase();
+            const layerIds = [];
+            const fallbackIds = [];
+
+            for (let i = 0; i < layers.length; ++i) {
+                const layer = layers[i];
+                const sourceLayer = String(layer["source-layer"] || "").toLowerCase();
+                const id = String(layer.id || "").toLowerCase();
+                const looksLikeBuilding = sourceLayer.indexOf("building") !== -1
+                        || id.indexOf("building") !== -1
+                        || id.indexOf("extrusion") !== -1;
+
+                if (layer.type !== "fill-extrusion")
+                    continue;
+
+                if (sourceLayer === wantedLayer) {
+                    layerIds.push(layer.id);
+                } else if (looksLikeBuilding) {
+                    fallbackIds.push(layer.id);
+                }
+            }
+
+            nativeBuilding3dLayerIds = layerIds.length ? layerIds : fallbackIds;
+
+            if (!nativeBuilding3dLayerIds.length) {
+                console.warn("GOONG_NATIVE_3D_BUILDING_LAYER_NOT_FOUND");
+                return false;
+            }
+
+            console.log("GOONG_NATIVE_3D_BUILDING_LAYER_OK=" + nativeBuilding3dLayerIds.join(","));
+            return true;
+        }
+
+        function firstSymbolLayerId() {
+            const style = map.getStyle();
+            const layers = style && Array.isArray(style.layers) ? style.layers : [];
+
+            for (let i = 0; i < layers.length; ++i) {
+                if (layers[i].type === "symbol")
+                    return layers[i].id;
+            }
+
+            return undefined;
+        }
+
+        function extrusionHeightExpression(fallbackHeight) {
+            return ["to-number", ["get", "__height"], fallbackHeight];
+        }
+
+        function extrusionBaseExpression() {
+            return ["to-number", ["get", "__base"], 0];
+        }
+
+        function parseNumber(value) {
+            if (value === undefined || value === null)
+                return NaN;
+
+            if (typeof value === "number")
+                return Number.isFinite(value) ? value : NaN;
+
+            const text = String(value).replace(",", ".").trim();
+            const match = text.match(/-?\d+(\.\d+)?/);
+            if (!match)
+                return NaN;
+
+            const number = Number(match[0]);
+            return Number.isFinite(number) ? number : NaN;
+        }
+
+        function numberProperty(properties, names) {
+            for (let i = 0; i < names.length; ++i) {
+                const value = parseNumber(properties[names[i]]);
+                if (Number.isFinite(value))
+                    return value;
+            }
+
+            return NaN;
+        }
+
+        function addCoordinateToBounds(bounds, value) {
+            if (!Array.isArray(value))
+                return;
+
+            if (value.length >= 2 && typeof value[0] === "number" && typeof value[1] === "number") {
+                bounds.west = Math.min(bounds.west, value[0]);
+                bounds.south = Math.min(bounds.south, value[1]);
+                bounds.east = Math.max(bounds.east, value[0]);
+                bounds.north = Math.max(bounds.north, value[1]);
+                return;
+            }
+
+            for (let i = 0; i < value.length; ++i)
+                addCoordinateToBounds(bounds, value[i]);
+        }
+
+        function geometryBounds(geometry) {
+            if (!geometry || !geometry.coordinates)
+                return null;
+
+            const bounds = {
+                west: Infinity,
+                south: Infinity,
+                east: -Infinity,
+                north: -Infinity
+            };
+            addCoordinateToBounds(bounds, geometry.coordinates);
+
+            if (!Number.isFinite(bounds.west) || !Number.isFinite(bounds.south)
+                    || !Number.isFinite(bounds.east) || !Number.isFinite(bounds.north))
+                return null;
+
+            return bounds;
+        }
+
+        function boundsCenter(bounds) {
+            return [
+                (bounds.west + bounds.east) / 2,
+                (bounds.south + bounds.north) / 2
+            ];
+        }
+
+        function pointInBounds(point, bounds) {
+            return point[0] >= bounds.west && point[0] <= bounds.east
+                    && point[1] >= bounds.south && point[1] <= bounds.north;
+        }
+
+        function landmarkNameMatch(properties) {
+            const keys = ["name", "Name", "NAME", "name_en", "name:en", "display_name"];
+            for (let i = 0; i < keys.length; ++i) {
+                const value = properties[keys[i]];
+                if (!value)
+                    continue;
+
+                const text = String(value).toLowerCase();
+                if (text.indexOf("landmark") !== -1 && text.indexOf("81") !== -1)
+                    return true;
+            }
+
+            return false;
+        }
+
+        function isLandmark81Feature(properties, geometry) {
+            if (landmarkNameMatch(properties))
+                return true;
+
+            const bounds = geometryBounds(geometry);
+            return bounds ? pointInBounds(boundsCenter(bounds), LANDMARK_81_BOUNDS) : false;
+        }
+
+        function featureHeightMeters(properties, geometry) {
+            if (isLandmark81Feature(properties, geometry))
+                return LANDMARK_81_HEIGHT;
+
+            const explicitHeight = numberProperty(properties, [
+                "render_height",
+                "height",
+                "building_height",
+                "HGT"
+            ]);
+            if (Number.isFinite(explicitHeight) && explicitHeight > 0)
+                return explicitHeight;
+
+            const levels = numberProperty(properties, ["levels", "building:levels"]);
+            if (Number.isFinite(levels) && levels > 0)
+                return levels * 3.4;
+
+            return 18;
+        }
+
+        function featureMinHeightMeters(properties) {
+            const minHeight = numberProperty(properties, [
+                "render_min_height",
+                "min_height",
+                "building_min_height"
+            ]);
+
+            return Number.isFinite(minHeight) && minHeight > 0 ? minHeight : 0;
+        }
+
+        function boundsArea(bounds) {
+            if (!bounds)
+                return 0;
+            return Math.max(0, bounds.east - bounds.west) * Math.max(0, bounds.north - bounds.south);
+        }
+
+        function landmarkFeatureScore(feature) {
+            if (!feature || !feature.geometry ||
+                    (feature.geometry.type !== "Polygon" && feature.geometry.type !== "MultiPolygon"))
+                return -1;
+
+            const properties = feature.properties || {};
+            const geometry = feature.geometry;
+            if (!isLandmark81Feature(properties, geometry))
+                return -1;
+
+            const bounds = geometryBounds(geometry);
+            const nameBonus = landmarkNameMatch(properties) ? 1000 : 0;
+            return nameBonus + boundsArea(bounds);
+        }
+
+        function bestLandmark81Feature(features) {
+            let best = null;
+            let bestScore = -1;
+
+            for (let i = 0; i < (features || []).length; ++i) {
+                const score = landmarkFeatureScore(features[i]);
+                if (score > bestScore) {
+                    best = features[i];
+                    bestScore = score;
+                }
+            }
+
+            return bestScore >= 0 ? best : null;
+        }
+
+        function buildingSourceLayerCandidates() {
+            const style = map.getStyle();
+            const layers = style && Array.isArray(style.layers) ? style.layers : [];
+            const seen = {};
+            const candidates = [];
+            const wantedLayer = String(configuredBuildingLayer || DEFAULT_GOONG_BUILDING_LAYER).toLowerCase();
+
+            function push(source, sourceLayer) {
+                if (!source || !sourceLayer)
+                    return;
+                const key = source + "|" + sourceLayer;
+                if (seen[key])
+                    return;
+                seen[key] = true;
+                candidates.push({
+                    source: source,
+                    sourceLayer: sourceLayer
+                });
+            }
+
+            for (let i = 0; i < layers.length; ++i) {
+                const layer = layers[i];
+                const sourceLayer = String(layer["source-layer"] || "").toLowerCase();
+                const id = String(layer.id || "").toLowerCase();
+                const looksLikeBuilding = sourceLayer === wantedLayer
+                        || sourceLayer.indexOf("building") !== -1
+                        || id.indexOf("building") !== -1
+                        || id.indexOf("footprint") !== -1
+                        || id.indexOf("extrusion") !== -1;
+
+                if (looksLikeBuilding)
+                    push(layer.source, layer["source-layer"]);
+            }
+
+            return candidates;
+        }
+
+        function landmark81FeatureFromSource() {
+            const candidates = buildingSourceLayerCandidates();
+            let best = null;
+            let bestScore = -1;
+
+            for (let i = 0; i < candidates.length; ++i) {
+                const candidate = candidates[i];
+                try {
+                    const features = map.querySourceFeatures(candidate.source, {
+                        sourceLayer: candidate.sourceLayer
+                    });
+                    const feature = bestLandmark81Feature(features);
+                    const score = landmarkFeatureScore(feature);
+                    if (score > bestScore) {
+                        best = feature;
+                        bestScore = score;
+                    }
+                } catch (e) {
+                    console.warn("GOONG_LANDMARK81_SOURCE_QUERY_FAILED", safeStringifyError(e));
+                }
+            }
+
+            return best;
+        }
+
+        function correctedLandmark81Feature(feature) {
+            const properties = Object.assign({}, feature && feature.properties ? feature.properties : {});
+            properties.name = properties.name || "Landmark 81";
+            properties.__height = LANDMARK_81_HEIGHT;
+            properties.__base = 0;
+            properties.__landmark81 = 1;
+
+            return {
+                type: "Feature",
+                geometry: feature.geometry,
+                properties: properties
+            };
+        }
+
+        function fallbackLandmark81Feature() {
+            return correctedLandmark81Feature({
+                geometry: {
+                    type: "Polygon",
+                    coordinates: [[
+                        [106.72072, 10.79442],
+                        [106.72170, 10.79422],
+                        [106.72218, 10.79492],
+                        [106.72204, 10.79572],
+                        [106.72110, 10.79610],
+                        [106.72058, 10.79542],
+                        [106.72072, 10.79442]
+                    ]]
+                },
+                properties: {
+                    name: "Landmark 81"
+                }
+            });
+        }
+
+        function landmark81Features(renderedFeatures) {
+            const feature = bestLandmark81Feature(renderedFeatures)
+                    || landmark81FeatureFromSource()
+                    || fallbackLandmark81Feature();
+            return [correctedLandmark81Feature(feature)];
+        }
+
+        function normalizeFootprintFeature(feature) {
+            const geometry = feature && feature.geometry ? feature.geometry : null;
+            if (!geometry || (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon"))
+                return null;
+
+            const properties = Object.assign({}, feature.properties || {});
+            properties.__height = featureHeightMeters(properties, geometry);
+            properties.__base = featureMinHeightMeters(properties);
+            properties.__landmark81 = isLandmark81Feature(properties, geometry) ? 1 : 0;
+
+            return {
+                type: "Feature",
+                geometry: geometry,
+                properties: properties
+            };
+        }
+
+        function featureKey(feature) {
+            const bounds = geometryBounds(feature.geometry);
+            if (!bounds)
+                return "";
+
+            const id = feature.id !== undefined && feature.id !== null ? String(feature.id) : "";
+            const layerId = feature.layer && feature.layer.id ? feature.layer.id : "";
+            return layerId + ":" + id + ":"
+                    + bounds.west.toFixed(6) + ","
+                    + bounds.south.toFixed(6) + ","
+                    + bounds.east.toFixed(6) + ","
+                    + bounds.north.toFixed(6);
+        }
+
+        function isBuildingFootprintLayer(layer) {
+            if (!layer || layer.type !== "fill" || !layer.source || !layer["source-layer"])
+                return false;
+
+            if (layer.source === SUPPLEMENTAL_BUILDING_SOURCE_ID || layer.source === LANDMARK_81_SOURCE_ID)
+                return false;
+
+            const wantedLayer = String(configuredBuildingLayer || DEFAULT_GOONG_BUILDING_LAYER).toLowerCase();
+            const sourceLayer = String(layer["source-layer"] || "").toLowerCase();
+            const id = String(layer.id || "").toLowerCase();
+
+            return sourceLayer === wantedLayer
+                    || sourceLayer.indexOf("building") !== -1
+                    || id.indexOf("building") !== -1
+                    || id.indexOf("footprint") !== -1;
+        }
+
+        function discoverRenderedFootprintLayerIds() {
+            const style = map.getStyle();
+            const layers = style && Array.isArray(style.layers) ? style.layers : [];
+            const ids = [];
+
+            for (let i = 0; i < layers.length; ++i) {
+                if (isBuildingFootprintLayer(layers[i]))
+                    ids.push(layers[i].id);
+            }
+
+            renderedFootprintLayerIds = ids;
+            return ids;
+        }
+
+        function ensureSupplementalBuildingLayer() {
+            if (!map.isStyleLoaded())
+                return false;
+
+            if (!map.getSource(SUPPLEMENTAL_BUILDING_SOURCE_ID)) {
+                map.addSource(SUPPLEMENTAL_BUILDING_SOURCE_ID, {
+                    type: "geojson",
+                    data: {
+                        type: "FeatureCollection",
+                        features: []
+                    }
+                });
+            }
+
+            if (map.getLayer(SUPPLEMENTAL_BUILDING_LAYER_ID))
+                return true;
+
+            const height = extrusionHeightExpression(18);
+            const minHeight = extrusionBaseExpression();
+            const beforeLayer = nativeBuilding3dLayerIds.length ? nativeBuilding3dLayerIds[0] : undefined;
+	            const supplementalLayer = {
+	                id: SUPPLEMENTAL_BUILDING_LAYER_ID,
+	                type: "fill-extrusion",
+	                source: SUPPLEMENTAL_BUILDING_SOURCE_ID,
+	                minzoom: 12,
+	                paint: {
+	                    "fill-extrusion-color": buildingMaterialColorExpression(height),
+	                    "fill-extrusion-height": height,
+	                    "fill-extrusion-base": minHeight,
+	                    "fill-extrusion-opacity": map3dActive ? BUILDING_ACTIVE_OPACITY : 0.0,
+	                    "fill-extrusion-vertical-gradient": true
+	                }
+	            };
+
+            try {
+                if (beforeLayer && map.getLayer(beforeLayer))
+                    map.addLayer(supplementalLayer, beforeLayer);
+                else
+                    map.addLayer(supplementalLayer);
+                return true;
+            } catch (e) {
+                console.warn("GOONG_SUPPLEMENTAL_3D_ADD_FAILED", safeStringifyError(e));
+                return false;
+            }
+        }
+
+        function ensureLandmark81Layer() {
+            if (!map.isStyleLoaded())
+                return false;
+
+            if (!map.getSource(LANDMARK_81_SOURCE_ID)) {
+                map.addSource(LANDMARK_81_SOURCE_ID, {
+                    type: "geojson",
+                    data: {
+                        type: "FeatureCollection",
+                        features: landmark81Features()
+                    }
+                });
+            }
+
+            if (map.getLayer(LANDMARK_81_LAYER_ID))
+                return true;
+
+            const layer = {
+                id: LANDMARK_81_LAYER_ID,
+                type: "fill-extrusion",
+                source: LANDMARK_81_SOURCE_ID,
+                minzoom: 12,
+	                paint: {
+	                    "fill-extrusion-color": buildingMaterialColorExpression(extrusionHeightExpression(LANDMARK_81_HEIGHT)),
+	                    "fill-extrusion-height": extrusionHeightExpression(LANDMARK_81_HEIGHT),
+	                    "fill-extrusion-base": extrusionBaseExpression(),
+	                    "fill-extrusion-opacity": map3dActive ? LANDMARK_ACTIVE_OPACITY : 0.0,
+	                    "fill-extrusion-vertical-gradient": true
+	                }
+	            };
+
+            try {
+                const beforeLayer = firstSymbolLayerId();
+                if (beforeLayer)
+                    map.addLayer(layer, beforeLayer);
+                else
+                    map.addLayer(layer);
+                return true;
+            } catch (e) {
+                console.warn("GOONG_LANDMARK81_3D_ADD_FAILED", safeStringifyError(e));
+                return false;
+            }
+        }
+
+        function scheduleSupplementalRefresh() {
+            window.clearTimeout(supplementalRefreshTimer);
+            supplementalRefreshTimer = window.setTimeout(refreshRenderedFootprint3d, 120);
+        }
+
+        function refreshRenderedFootprint3d() {
+            if (!map.isStyleLoaded())
+                return;
+
+            ensureGoongBuildingLayers();
+            ensureSupplementalBuildingLayer();
+            ensureLandmark81Layer();
+
+            const supplementalSource = map.getSource(SUPPLEMENTAL_BUILDING_SOURCE_ID);
+            const landmarkSource = map.getSource(LANDMARK_81_SOURCE_ID);
+            if (!supplementalSource || !supplementalSource.setData)
+                return;
+
+            const layerIds = discoverRenderedFootprintLayerIds();
+            if (!layerIds.length) {
+                supplementalSource.setData({
+                    type: "FeatureCollection",
+                    features: []
+                });
+                if (landmarkSource && landmarkSource.setData) {
+                    landmarkSource.setData({
+                        type: "FeatureCollection",
+                        features: landmark81Features()
+                    });
+                }
+                console.warn("GOONG_RENDERED_FOOTPRINT_LAYERS_NOT_FOUND");
+                return;
+            }
+
+            let rendered = [];
+            try {
+                const canvas = map.getCanvas();
+                const width = Math.max(1, canvas.clientWidth || canvas.width || 1);
+                const height = Math.max(1, canvas.clientHeight || canvas.height || 1);
+                rendered = map.queryRenderedFeatures([[0, 0], [width, height]], {
+                    layers: layerIds
+                });
+            } catch (e) {
+                console.warn("GOONG_RENDERED_FOOTPRINT_QUERY_FAILED", safeStringifyError(e));
+                return;
+            }
+
+            const seen = {};
+            const features = [];
+
+            for (let i = 0; i < rendered.length; ++i) {
+                const normalized = normalizeFootprintFeature(rendered[i]);
+                if (!normalized)
+                    continue;
+                if (normalized.properties && normalized.properties.__landmark81)
+                    continue;
+
+                const key = featureKey(rendered[i]) || featureKey(normalized);
+                if (key && seen[key])
+                    continue;
+                if (key)
+                    seen[key] = true;
+
+                features.push(normalized);
+            }
+
+            supplementalSource.setData({
+                type: "FeatureCollection",
+                features: features
+            });
+
+            if (landmarkSource && landmarkSource.setData) {
+                landmarkSource.setData({
+                    type: "FeatureCollection",
+                    features: landmark81Features(rendered)
+                });
+            }
+
+            console.log("GOONG_RENDERED_FOOTPRINT_3D="
+                    + features.length + " layers=" + layerIds.join(","));
+        }
+
+        map.on("load", function () {
+            console.log("GOONG_MAP_LOAD_OK");
+            window.clearTimeout(styleRetryTimer);
+            styleRetryCount = 0;
+            //setDebug("GOONG_COLORFUL_3D_2026_05_12");
+            resizeMapSoon();
+
+		            enhanceGoongMapColors();
+			            ensureGoongBuildingLayers();
+			            ensureSupplementalBuildingLayer();
+			            ensureLandmark81Layer();
+			            applyRouteLayer();
+			            set3d(true);
+			            scheduleSupplementalRefresh();
+
+            if (lastPayload && isPayloadSessionStillValid(lastPayload))
+                applyPayload(lastPayload);
+        });
+
+        map.on("style.load", function () {
+            //console.log("GOONG_STYLE_LOAD_OK");
+            window.clearTimeout(styleRetryTimer);
+            styleRetryCount = 0;
+            resizeMapSoon();
+
+		            enhanceGoongMapColors();
+			            ensureGoongBuildingLayers();
+			            ensureSupplementalBuildingLayer();
+			            ensureLandmark81Layer();
+			            applyRouteLayer();
+			            set3d(map3dActive);
+			            scheduleSupplementalRefresh();
+
+            if (lastPayload && isPayloadSessionStillValid(lastPayload))
+                applyPayload(lastPayload);
+        });
+
+        map.on("error", function (e) {
+            const err = e && e.error ? e.error : e;
+            const text = "GOONG_MAP_ERROR=" + safeStringifyError(err);
+            console.error(text);
+            if ((err && err.url && err.url.indexOf("goong_map_web") !== -1)
+                    || text.indexOf("Failed to fetch") !== -1
+                    || text.indexOf("\"status\":0") !== -1) {
+                scheduleStyleRetry(text);
+            }
+            //setDebug(text);
+        });
+
+        function payloadSessionId(payload) {
+            if (!payload)
+                return -1;
+
+            const raw = payload.navigationSessionId;
+            if (Number.isFinite(raw))
+                return Math.floor(raw);
+
+            const parsed = Number(raw);
+            return Number.isFinite(parsed) ? Math.floor(parsed) : -1;
+        }
+
+        function isPayloadSessionStillValid(payload) {
+            const sessionId = payloadSessionId(payload);
+            if (sessionId < 0)
+                return false;
+            if (sessionId <= clearedNavigationSessionId)
+                return false;
+            if (activeNavigationSessionId >= 0 && sessionId < activeNavigationSessionId)
+                return false;
+            return true;
+        }
+
+        function acceptPayloadSession(payload) {
+            const sessionId = payloadSessionId(payload);
+            if (sessionId < 0) {
+                console.warn("GOONG_PAYLOAD_IGNORED_NO_SESSION");
+                return false;
+            }
+
+            if (sessionId <= clearedNavigationSessionId) {
+                console.warn("GOONG_PAYLOAD_IGNORED_CLEARED_SESSION", sessionId, "cleared", clearedNavigationSessionId);
+                return false;
+            }
+
+            if (activeNavigationSessionId >= 0 && sessionId < activeNavigationSessionId) {
+                console.warn("GOONG_PAYLOAD_IGNORED_OLD_SESSION", sessionId, "active", activeNavigationSessionId);
+                return false;
+            }
+
+            if (sessionId !== activeNavigationSessionId) {
+                activeNavigationSessionId = sessionId;
+                appliedRouteKey = "";
+                driveRouteKey = "";
+                driveRouteMeasure = null;
+                driveProgressMeters = 0;
+                driveVisualProgressMeters = 0;
+                driveFilteredSpeedMps = 0;
+                driveCameraBearing = NaN;
+                lastRouteVisualUpdateMs = 0;
+                lastProgressPublishMs = 0;
+                console.warn("GOONG_NAVIGATION_SESSION_ACCEPTED", sessionId);
+            }
+
+            return true;
+        }
+
+        function routeFeature(route) {
+            return {
+                type: "FeatureCollection",
+                features: [{
+                    type: "Feature",
+                    geometry: {
+                        type: "LineString",
+                        coordinates: Array.isArray(route) ? route : []
+                    },
+                    properties: {}
+                }]
+            };
+        }
+
+        function markerFeature(point, bearing) {
+            if (!validRoutePoint(point))
+                return EMPTY_ROUTE;
+
+            return {
+                type: "FeatureCollection",
+                features: [{
+                    type: "Feature",
+                    geometry: {
+                        type: "Point",
+                        coordinates: point
+                    },
+                    properties: {
+                        bearing: Number.isFinite(bearing) ? bearing : 0
+                    }
+                }]
+            };
+        }
+
+        function validRoutePoint(point) {
+            return Array.isArray(point)
+                    && point.length >= 2
+                    && Number.isFinite(point[0])
+                    && Number.isFinite(point[1])
+                    && point[1] >= -90 && point[1] <= 90
+                    && point[0] >= -180 && point[0] <= 180;
+        }
+
+        function normalizedRoute(route) {
+            const line = [];
+            if (!Array.isArray(route))
+                return line;
+
+            for (let i = 0; i < route.length; ++i) {
+                const point = route[i];
+                if (!validRoutePoint(point))
+                    continue;
+                const normalized = [point[0], point[1]];
+                const previous = line.length ? line[line.length - 1] : null;
+                if (previous && samePoint(previous, normalized))
+                    continue;
+                line.push(normalized);
+            }
+
+            return line;
+        }
+
+        function ensureRouteSource() {
+            if (!map.isStyleLoaded())
+                return false;
+
+            if (!map.getSource(ROUTE_SOURCE_ID)) {
+                map.addSource(ROUTE_SOURCE_ID, {
+                    type: "geojson",
+                    data: EMPTY_ROUTE
+                });
+            }
+
+            if (!map.getSource(REMAINING_ROUTE_SOURCE_ID)) {
+                map.addSource(REMAINING_ROUTE_SOURCE_ID, {
+                    type: "geojson",
+                    data: EMPTY_ROUTE
+                });
+            }
+
+            if (!map.getSource(VEHICLE_MARKER_SOURCE_ID)) {
+                map.addSource(VEHICLE_MARKER_SOURCE_ID, {
+                    type: "geojson",
+                    data: EMPTY_ROUTE
+                });
+            }
+
+            return true;
+        }
+
+        function addRouteLayer(layer, beforeLayer) {
+            if (map.getLayer(layer.id))
+                return;
+
+            try {
+                if (beforeLayer && map.getLayer(beforeLayer))
+                    map.addLayer(layer, beforeLayer);
+                else
+                    map.addLayer(layer);
+            } catch (e) {
+                console.warn("GOONG_ROUTE_LAYER_ADD_FAILED", layer.id, safeStringifyError(e));
+            }
+        }
+
+        function applyRouteLayer() {
+            if (!ensureRouteSource())
+                return false;
+
+            const beforeLayer = firstSymbolLayerId();
+            const routeWidth = [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                12, 4,
+                15, 7,
+                17, 13,
+                19, 24
+            ];
+
+            addRouteLayer({
+                id: ROUTE_BASE_LAYER_ID,
+                type: "line",
+                source: ROUTE_SOURCE_ID,
+                layout: {
+                    "line-cap": "round",
+                    "line-join": "round"
+                },
+                paint: {
+                    "line-color": "#334155",
+                    "line-width": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        12, 5,
+                        15, 9,
+                        17, 15,
+                        19, 26
+                    ],
+                    "line-opacity": 0.32
+                }
+            }, beforeLayer);
+
+            addRouteLayer({
+                id: ROUTE_GLOW_LAYER_ID,
+                type: "line",
+                source: REMAINING_ROUTE_SOURCE_ID,
+                layout: {
+                    "line-cap": "round",
+                    "line-join": "round"
+                },
+                paint: {
+                    "line-color": "#1d4ed8",
+                    "line-width": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        12, 10,
+                        15, 18,
+                        17, 28,
+                        19, 44
+                    ],
+                    "line-blur": 8,
+                    "line-opacity": 0.58
+                }
+            }, beforeLayer);
+
+            addRouteLayer({
+                id: ROUTE_CASING_LAYER_ID,
+                type: "line",
+                source: REMAINING_ROUTE_SOURCE_ID,
+                layout: {
+                    "line-cap": "round",
+                    "line-join": "round"
+                },
+                paint: {
+                    "line-color": "#020817",
+                    "line-width": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        12, 7,
+                        15, 12,
+                        17, 20,
+                        19, 34
+                    ],
+                    "line-opacity": 0.96
+                }
+            }, beforeLayer);
+
+            addRouteLayer({
+                id: ROUTE_LINE_LAYER_ID,
+                type: "line",
+                source: REMAINING_ROUTE_SOURCE_ID,
+                layout: {
+                    "line-cap": "round",
+                    "line-join": "round"
+                },
+                paint: {
+                    "line-color": "#8fd3ff",
+                    "line-width": routeWidth,
+                    "line-opacity": 1.0
+                }
+            }, beforeLayer);
+
+            addRouteLayer({
+                id: VEHICLE_MARKER_GLOW_LAYER_ID,
+                type: "circle",
+                source: VEHICLE_MARKER_SOURCE_ID,
+                paint: {
+                    "circle-color": "#bfe9ff",
+                    "circle-radius": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        12, 8,
+                        16, 12,
+                        19, 18
+                    ],
+                    "circle-opacity": 0.28,
+                    "circle-stroke-color": "#ffffff",
+                    "circle-stroke-width": 1,
+                    "circle-stroke-opacity": 0.18
+                }
+            }, beforeLayer);
+
+            addRouteLayer({
+                id: VEHICLE_MARKER_LAYER_ID,
+                type: "circle",
+                source: VEHICLE_MARKER_SOURCE_ID,
+                paint: {
+                    "circle-color": "#ffffff",
+                    "circle-radius": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        12, 4,
+                        16, 6,
+                        19, 9
+                    ],
+                    "circle-stroke-color": "#60a5fa",
+                    "circle-stroke-width": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        12, 2,
+                        19, 4
+                    ],
+                    "circle-stroke-opacity": 0.95
+                }
+            }, beforeLayer);
+
+            return true;
+        }
+
+        function setGeoJsonSourceData(sourceId, data) {
+            const source = map.getSource(sourceId);
+            if (source && source.setData)
+                source.setData(data);
+        }
+
+        function remainingRouteFeature(measure, distance) {
+            if (!measure || !measure.segments || !measure.segments.length)
+                return EMPTY_ROUTE;
+
+            const sample = pointAtRouteDistance(measure, distance);
+            if (!sample || !validRoutePoint(sample.point))
+                return EMPTY_ROUTE;
+
+            const line = [sample.point];
+            const clamped = Math.max(0, Math.min(measure.total, distance));
+
+            for (let i = 0; i < measure.segments.length; ++i) {
+                const segment = measure.segments[i];
+                if (segment.end <= clamped)
+                    continue;
+
+                const previous = line[line.length - 1];
+                if (!samePoint(previous, segment.to))
+                    line.push(segment.to);
+            }
+
+            return line.length > 1 ? routeFeature(line) : EMPTY_ROUTE;
+        }
+
+        function publishRouteProgress(measure, progressMeters) {
+            const totalMeters = measure && Number.isFinite(measure.total) ? Math.max(0, measure.total) : 0;
+            const clampedProgress = Math.max(0, Math.min(totalMeters, Number.isFinite(progressMeters) ? progressMeters : 0));
+            const remainingMeters = Math.max(0, totalMeters - clampedProgress);
+            const speedMps = driveSpeedMetersPerSecond();
+            const remainingSeconds = speedMps > 0 ? remainingMeters / speedMps : -1;
+
+            sendRouteProgressToQml({
+                progressMeters: clampedProgress,
+                totalMeters: totalMeters,
+                remainingMeters: remainingMeters,
+                remainingSeconds: Number.isFinite(remainingSeconds) ? remainingSeconds : -1,
+                speedKph: driveSpeedKph
+            });
+        }
+
+        function updateRouteProgressVisuals(measure, progressMeters, sample, forceRouteUpdate) {
+            if (!measure || !measure.total) {
+                setGeoJsonSourceData(REMAINING_ROUTE_SOURCE_ID, EMPTY_ROUTE);
+                setGeoJsonSourceData(VEHICLE_MARKER_SOURCE_ID, EMPTY_ROUTE);
+                lastRouteVisualUpdateMs = 0;
+                lastProgressPublishMs = 0;
+                publishRouteProgress(null, 0);
+                return;
+            }
+
+            const clamped = Math.max(0, Math.min(measure.total, progressMeters));
+            const current = sample || pointAtRouteDistance(measure, clamped);
+
+            /* Marker source nhỏ: update theo frame. */
+            setGeoJsonSourceData(VEHICLE_MARKER_SOURCE_ID,
+                                 current ? markerFeature(current.point, current.bearing) : EMPTY_ROUTE);
+
+            const now = performance.now ? performance.now() : Date.now();
+
+            /* Route highlight dài: không setData mỗi frame để tránh giật trên QtWebEngine/Pi5. */
+            const shouldUpdateRoute = !!forceRouteUpdate
+                    || lastRouteVisualUpdateMs <= 0
+                    || now - lastRouteVisualUpdateMs >= 120
+                    || clamped >= measure.total - 0.8;
+
+            if (shouldUpdateRoute) {
+                lastRouteVisualUpdateMs = now;
+                setGeoJsonSourceData(REMAINING_ROUTE_SOURCE_ID, remainingRouteFeature(measure, clamped));
+            }
+
+            const shouldPublishProgress = !!forceRouteUpdate
+                    || lastProgressPublishMs <= 0
+                    || now - lastProgressPublishMs >= 180
+                    || clamped >= measure.total - 0.8;
+
+            if (shouldPublishProgress) {
+                lastProgressPublishMs = now;
+                publishRouteProgress(measure, clamped);
+            }
+        }
+
+        function setRoute(route, forceRouteUpdate) {
+            if (!applyRouteLayer())
+                return;
+
+            const line = normalizedRoute(route);
+            const routeKey = line.length > 1 ? routeIdentity(line) : "";
+
+            if (line.length <= 1) {
+                appliedRouteKey = "";
+                driveRouteMeasure = null;
+                driveRouteKey = "";
+                driveProgressMeters = 0;
+                driveVisualProgressMeters = 0;
+                driveFilteredSpeedMps = 0;
+                lastRouteVisualUpdateMs = 0;
+                lastProgressPublishMs = 0;
+                setGeoJsonSourceData(ROUTE_SOURCE_ID, EMPTY_ROUTE);
+                updateRouteProgressVisuals(null, 0, null, true);
+                return;
+            }
+
+            /* Route không đổi: không setData lại route full, không reset progress. */
+            if (!forceRouteUpdate && routeKey === appliedRouteKey && driveRouteMeasure && driveRouteKey === routeKey)
+                return;
+
+            const measure = buildRouteMeasure(line);
+            const sameRoute = routeKey === driveRouteKey;
+            const progress = sameRoute && Number.isFinite(driveVisualProgressMeters)
+                    ? driveVisualProgressMeters
+                    : 0;
+
+            appliedRouteKey = routeKey;
+            driveRouteKey = routeKey;
+            driveRouteMeasure = measure;
+            driveProgressMeters = Math.max(0, Math.min(measure.total, progress));
+            driveVisualProgressMeters = driveProgressMeters;
+
+            setGeoJsonSourceData(ROUTE_SOURCE_ID, routeFeature(line));
+            updateRouteProgressVisuals(measure,
+                                       driveVisualProgressMeters,
+                                       pointAtRouteDistance(measure, driveVisualProgressMeters),
+                                       true);
+        }
+
+        function set3d(enabled) {
+            map3dActive = !!enabled;
+
+            ensureGoongBuildingLayers();
+            ensureSupplementalBuildingLayer();
+            ensureLandmark81Layer();
+
+            for (let i = 0; i < nativeBuilding3dLayerIds.length; ++i) {
+                const layerId = nativeBuilding3dLayerIds[i];
+                if (!map.getLayer(layerId))
+                    continue;
+
+                try {
+                    map.setLayoutProperty(layerId, "visibility", enabled ? "visible" : "none");
+                } catch (e) {
+                    console.warn("GOONG_NATIVE_3D_VISIBILITY_UPDATE_FAILED", layerId, e);
+                }
+
+                try {
+	                    map.setPaintProperty(layerId, "fill-extrusion-opacity", enabled ? BUILDING_ACTIVE_OPACITY : 0.0);
+                } catch (e) {
+                    console.warn("GOONG_NATIVE_3D_OPACITY_UPDATE_FAILED", layerId, e);
+                }
+            }
+
+            if (map.getLayer(SUPPLEMENTAL_BUILDING_LAYER_ID)) {
+                try {
+                    map.setLayoutProperty(SUPPLEMENTAL_BUILDING_LAYER_ID, "visibility", enabled ? "visible" : "none");
+                } catch (e) {
+                    console.warn("GOONG_SUPPLEMENTAL_3D_VISIBILITY_UPDATE_FAILED", e);
+                }
+
+                try {
+	                    map.setPaintProperty(SUPPLEMENTAL_BUILDING_LAYER_ID, "fill-extrusion-opacity", enabled ? BUILDING_ACTIVE_OPACITY : 0.0);
+                } catch (e) {
+                    console.warn("GOONG_SUPPLEMENTAL_3D_OPACITY_UPDATE_FAILED", e);
+                }
+            }
+
+            if (map.getLayer(LANDMARK_81_LAYER_ID)) {
+                try {
+                    map.setLayoutProperty(LANDMARK_81_LAYER_ID, "visibility", enabled ? "visible" : "none");
+                } catch (e) {
+                    console.warn("GOONG_LANDMARK81_3D_VISIBILITY_UPDATE_FAILED", e);
+                }
+
+                try {
+	                    map.setPaintProperty(LANDMARK_81_LAYER_ID, "fill-extrusion-opacity", enabled ? LANDMARK_ACTIVE_OPACITY : 0.0);
+                } catch (e) {
+                    console.warn("GOONG_LANDMARK81_3D_OPACITY_UPDATE_FAILED", e);
+                }
+            }
+
+            if (enabled)
+                scheduleSupplementalRefresh();
+        }
+
+        function updateProviderConfig(payload) {
+            let needsReload = false;
+            const nextKey = payload.goongMapTilesKey || goongMapTilesKey;
+            const nextStyle = payload.goongStyleUrl || goongStyleUrl || DEFAULT_GOONG_STYLE_URL;
+            const nextBuildingLayer = payload.buildingSourceLayer || configuredBuildingLayer || DEFAULT_GOONG_BUILDING_LAYER;
+
+            if (nextKey !== goongMapTilesKey) {
+                goongMapTilesKey = nextKey;
+                needsReload = true;
+            }
+
+            if (nextStyle !== goongStyleUrl) {
+                goongStyleUrl = nextStyle;
+                needsReload = true;
+            }
+
+            if (nextBuildingLayer !== configuredBuildingLayer) {
+                configuredBuildingLayer = nextBuildingLayer;
+                needsReload = true;
+            }
+
+            return needsReload;
+        }
+
+        function normalizedBearing(value) {
+            if (!Number.isFinite(value))
+                return 0;
+
+            const bearing = value % 360;
+            return bearing < 0 ? bearing + 360 : bearing;
+        }
+
+        function shortestBearingDelta(from, to) {
+            let delta = normalizedBearing(to) - normalizedBearing(from);
+            if (delta > 180)
+                delta -= 360;
+            else if (delta < -180)
+                delta += 360;
+            return delta;
+        }
+
+        function smoothingAlpha(deltaSeconds, responseSeconds) {
+            if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0)
+                return 1;
+
+            return Math.max(0, Math.min(1, 1 - Math.exp(-deltaSeconds / responseSeconds)));
+        }
+
+        function smoothDriveBearing(targetBearing, deltaSeconds) {
+            const target = normalizedBearing(targetBearing);
+            if (!Number.isFinite(driveCameraBearing)) {
+                driveCameraBearing = target;
+                return driveCameraBearing;
+            }
+
+            const alpha = smoothingAlpha(deltaSeconds, 0.42);
+            driveCameraBearing = normalizedBearing(driveCameraBearing
+                    + shortestBearingDelta(driveCameraBearing, target) * alpha);
+            return driveCameraBearing;
+        }
+
+        function bearingBetween(from, to) {
+            if (!from || !to)
+                return NaN;
+
+            const toRad = function (x) { return x * Math.PI / 180.0; };
+            const toDeg = function (x) { return x * 180.0 / Math.PI; };
+            const lon1 = toRad(from[0]);
+            const lat1 = toRad(from[1]);
+            const lon2 = toRad(to[0]);
+            const lat2 = toRad(to[1]);
+            const dLon = lon2 - lon1;
+            const y = Math.sin(dLon) * Math.cos(lat2);
+            const x = Math.cos(lat1) * Math.sin(lat2)
+                    - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+            return normalizedBearing(toDeg(Math.atan2(y, x)));
+        }
+
+        function lookAheadRouteBearing(measure, distance, sample) {
+            if (!measure || !measure.total || !sample)
+                return sample && Number.isFinite(sample.bearing) ? sample.bearing : map.getBearing();
+
+            const speedMps = driveSpeedMetersPerSecond();
+            const lookAheadMeters = Math.max(22, Math.min(72, 24 + speedMps * 1.7));
+            const ahead = pointAtRouteDistance(measure,
+                                               Math.min(measure.total, distance + lookAheadMeters));
+            if (ahead && ahead.point && !samePoint(sample.point, ahead.point)) {
+                const bearing = bearingBetween(sample.point, ahead.point);
+                if (Number.isFinite(bearing))
+                    return bearing;
+            }
+
+            return Number.isFinite(sample.bearing) ? sample.bearing : map.getBearing();
+        }
+
+        function samePoint(a, b) {
+            return a && b
+                    && Math.abs(a[0] - b[0]) < 0.000001
+                    && Math.abs(a[1] - b[1]) < 0.000001;
+        }
+
+        function driveStartPoint(payload, center) {
+            return pointFeature(payload && payload.driveStart)
+                    || center
+                    || DEFAULT_CENTER;
+        }
+
+        function driveEndPoint(payload, start) {
+            const end = pointFeature(payload && payload.driveEnd);
+            if (end && !samePoint(end, start))
+                return end;
+
+            return DEFAULT_DRIVE_END;
+        }
+
+        function firstPersonZoom(payload, fallbackZoom) {
+            if (payload && Number.isFinite(payload.firstPersonZoom))
+                return Math.max(17.2, Math.min(20.0, payload.firstPersonZoom));
+            if (Number.isFinite(fallbackZoom))
+                return Math.max(17.2, Math.min(20.0, fallbackZoom));
+            return DEFAULT_FIRST_PERSON_ZOOM;
+        }
+
+        function firstPersonPitch(payload, fallbackPitch) {
+            if (payload && Number.isFinite(payload.firstPersonPitch))
+                return Math.max(68.0, Math.min(79.0, payload.firstPersonPitch));
+            if (Number.isFinite(fallbackPitch))
+                return Math.max(68.0, Math.min(79.0, fallbackPitch));
+            return DEFAULT_FIRST_PERSON_PITCH;
+        }
+
+        function firstPersonCamera(point, bearing, payload, fallbackZoom, fallbackPitch) {
+            return {
+                center: point,
+                zoom: firstPersonZoom(payload, fallbackZoom),
+                pitch: firstPersonPitch(payload, fallbackPitch),
+                bearing: normalizedBearing(Number.isFinite(bearing) ? bearing : map.getBearing()),
+                essential: true
+            };
+        }
+
+        function stopDriveAnimation(cancelMapMotion) {
+            cancelDriveFrame();
+            driveAnimationActive = false;
+            driveLastFrameTime = 0;
+            drivePayload = null;
+            driveCameraBearing = NaN;
+
+            if (cancelMapMotion !== false) {
+                try {
+                    map.stop();
+                } catch (e) {
+                    console.warn("GOONG_DRIVE_ANIMATION_STOP_FAILED", e);
+                }
+            }
+        }
+
+        function clearNavigationState(sessionId) {
+            const cleared = Number(sessionId);
+            if (Number.isFinite(cleared))
+                clearedNavigationSessionId = Math.max(clearedNavigationSessionId, Math.floor(cleared));
+            else
+                clearedNavigationSessionId = Math.max(clearedNavigationSessionId, activeNavigationSessionId);
+
+            activeNavigationSessionId = -1;
+            cancelDriveFrame();
+
+            driveAnimationActive = false;
+            driveLastFrameTime = 0;
+            driveRouteKey = "";
+            appliedRouteKey = "";
+            driveRouteMeasure = null;
+            driveProgressMeters = 0;
+            driveVisualProgressMeters = 0;
+            driveFilteredSpeedMps = 0;
+            drivePayload = null;
+            driveCameraBearing = NaN;
+            drivePausedBySpeed = true;
+            pendingRouteProgressPayload = null;
+            lastRouteVisualUpdateMs = 0;
+            lastProgressPublishMs = 0;
+            lastPayload = null;
+
+            window.clearTimeout(routeProgressLogTimer);
+            routeProgressLogTimer = null;
+
+            suppressCameraLogs(1000);
+
+            try {
+                map.stop();
+            } catch (e) {
+                console.warn("GOONG_CLEAR_MAP_STOP_FAILED", e);
+            }
+
+            try {
+                if (applyRouteLayer()) {
+                    setGeoJsonSourceData(ROUTE_SOURCE_ID, EMPTY_ROUTE);
+                    setGeoJsonSourceData(REMAINING_ROUTE_SOURCE_ID, EMPTY_ROUTE);
+                    setGeoJsonSourceData(VEHICLE_MARKER_SOURCE_ID, EMPTY_ROUTE);
+                }
+            } catch (e) {
+                console.warn("GOONG_CLEAR_ROUTE_SOURCES_FAILED", e);
+            }
+
+            publishRouteProgress(null, 0);
+            console.warn("GOONG_NAVIGATION_STATE_CLEARED", "clearedSession", clearedNavigationSessionId);
+        }
+
+        function routePointDistanceMeters(a, b) {
+            if (!a || !b)
+                return 0;
+
+            const toRad = function (x) { return x * Math.PI / 180.0; };
+            const earthRadius = 6371000.0;
+            const lat1 = toRad(a[1]);
+            const lat2 = toRad(b[1]);
+            const dLat = toRad(b[1] - a[1]);
+            const dLon = toRad(b[0] - a[0]);
+            const s = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                    + Math.cos(lat1) * Math.cos(lat2)
+                    * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return earthRadius * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+        }
+
+        function routeFromPayload(payload, start, end) {
+            const route = normalizedRoute(payload && payload.route);
+            if (route.length > 1)
+                return route;
+
+            return [];
+        }
+
+        function routeIdentity(route) {
+            if (!Array.isArray(route) || !route.length)
+                return "";
+
+            const first = route[0];
+            const last = route[route.length - 1];
+            return route.length + ":"
+                    + first[0].toFixed(6) + "," + first[1].toFixed(6) + ":"
+                    + last[0].toFixed(6) + "," + last[1].toFixed(6);
+        }
+
+        function buildRouteMeasure(route) {
+            const segments = [];
+            let total = 0;
+
+            for (let i = 1; i < route.length; ++i) {
+                const from = route[i - 1];
+                const to = route[i];
+                const length = routePointDistanceMeters(from, to);
+                if (length <= 0.01)
+                    continue;
+
+                segments.push({
+                    from: from,
+                    to: to,
+                    start: total,
+                    end: total + length,
+                    length: length,
+                    bearing: bearingBetween(from, to)
+                });
+                total += length;
+            }
+
+            return {
+                segments: segments,
+                total: total
+            };
+        }
+
+        function pointAtRouteDistance(measure, distance) {
+            if (!measure || !measure.segments || !measure.segments.length)
+                return null;
+
+            const clamped = Math.max(0, Math.min(measure.total, distance));
+            for (let i = 0; i < measure.segments.length; ++i) {
+                const segment = measure.segments[i];
+                if (clamped > segment.end && i < measure.segments.length - 1)
+                    continue;
+
+                const local = segment.length > 0
+                        ? Math.max(0, Math.min(1, (clamped - segment.start) / segment.length))
+                        : 0;
+                return {
+                    point: [
+                        segment.from[0] + (segment.to[0] - segment.from[0]) * local,
+                        segment.from[1] + (segment.to[1] - segment.from[1]) * local
+                    ],
+                    bearing: segment.bearing
+                };
+            }
+
+            const last = measure.segments[measure.segments.length - 1];
+            return {
+                point: last.to,
+                bearing: last.bearing
+            };
+        }
+
+        function driveCameraPayload() {
+            return drivePayload || lastPayload || {};
+        }
+
+        function driveSpeedMetersPerSecond() {
+            return driveSpeedKph > driveStoppedSpeedThresholdKph
+                    ? driveSpeedKph / 3.6
+                    : 0;
+        }
+
+        function smoothedDriveSpeedMetersPerSecond(targetSpeedMps, deltaSeconds) {
+            if (!Number.isFinite(targetSpeedMps) || targetSpeedMps <= 0) {
+                driveFilteredSpeedMps = 0;
+                return 0;
+            }
+
+            if (!Number.isFinite(driveFilteredSpeedMps) || driveFilteredSpeedMps <= 0) {
+                driveFilteredSpeedMps = targetSpeedMps;
+                return driveFilteredSpeedMps;
+            }
+
+            const alpha = smoothingAlpha(deltaSeconds, 0.22);
+            driveFilteredSpeedMps = driveFilteredSpeedMps + (targetSpeedMps - driveFilteredSpeedMps) * alpha;
+            return driveFilteredSpeedMps;
+        }
+
+        function smoothedVisualProgressMeters(targetProgressMeters, deltaSeconds) {
+            if (!driveRouteMeasure || !driveRouteMeasure.total)
+                return 0;
+
+            const target = Math.max(0, Math.min(driveRouteMeasure.total, targetProgressMeters));
+
+            if (!Number.isFinite(driveVisualProgressMeters) || driveVisualProgressMeters <= 0) {
+                driveVisualProgressMeters = target;
+                return driveVisualProgressMeters;
+            }
+
+            if (target < driveVisualProgressMeters) {
+                driveVisualProgressMeters = target;
+                return driveVisualProgressMeters;
+            }
+
+            const maxStep = Math.max(0.08, driveSpeedMetersPerSecond() * Math.max(0.001, deltaSeconds) * 1.45);
+            const alpha = smoothingAlpha(deltaSeconds, 0.16);
+            const desired = driveVisualProgressMeters + (target - driveVisualProgressMeters) * alpha;
+            driveVisualProgressMeters = Math.min(target, Math.min(driveVisualProgressMeters + maxStep, desired));
+            return driveVisualProgressMeters;
+        }
+
+        function cancelDriveFrame() {
+            if (!driveAnimationFrame)
+                return;
+
+            window.cancelAnimationFrame(driveAnimationFrame);
+            driveAnimationFrame = 0;
+        }
+
+        function setDriveSpeed(speedKph, stoppedThresholdKph, stopMapMotion) {
+            driveSpeedKph = Number.isFinite(speedKph) ? Math.max(0, speedKph) : 0;
+
+            if (Number.isFinite(stoppedThresholdKph))
+                driveStoppedSpeedThresholdKph = Math.max(0, stoppedThresholdKph);
+
+            if (driveSpeedMetersPerSecond() <= 0) {
+                drivePausedBySpeed = true;
+                driveFilteredSpeedMps = 0;
+                cancelDriveFrame();
+                driveLastFrameTime = 0;
+                suppressCameraLogs(900);
+
+                if (stopMapMotion !== false) {
+                    try {
+                        map.stop();
+                    } catch (e) {
+                        console.warn("GOONG_DRIVE_SPEED_STOP_FAILED", e);
+                    }
+                }
+
+                if (driveRouteMeasure && driveRouteMeasure.total) {
+                    const frozen = Number.isFinite(driveVisualProgressMeters)
+                            ? driveVisualProgressMeters
+                            : driveProgressMeters;
+                    driveProgressMeters = Math.max(0, Math.min(driveRouteMeasure.total, frozen));
+                    driveVisualProgressMeters = driveProgressMeters;
+                    updateRouteProgressVisuals(driveRouteMeasure,
+                                               driveVisualProgressMeters,
+                                               pointAtRouteDistance(driveRouteMeasure, driveVisualProgressMeters),
+                                               true);
+                }
+
+                return;
+            }
+
+            drivePausedBySpeed = false;
+            scheduleDriveFrame();
+        }
+
+        function updateDriveTelemetry(payload) {
+            if (!payload) {
+                setDriveSpeed(0, driveStoppedSpeedThresholdKph, true);
+                return;
+            }
+
+            setDriveSpeed(payload.driveSpeedKph,
+                          payload.stoppedSpeedThresholdKph,
+                          true);
+        }
+
+        function renderDrivePosition(payload, fallbackZoom, fallbackPitch, deltaSeconds) {
+            if (!driveRouteMeasure || !driveRouteMeasure.total)
+                return false;
+
+            driveProgressMeters = Math.max(0, Math.min(driveRouteMeasure.total, driveProgressMeters));
+
+            const visualProgress = drivePausedBySpeed || driveSpeedMetersPerSecond() <= 0
+                    ? driveVisualProgressMeters
+                    : smoothedVisualProgressMeters(driveProgressMeters, deltaSeconds || (1 / 60));
+
+            const sample = pointAtRouteDistance(driveRouteMeasure, visualProgress);
+            if (!sample)
+                return false;
+
+            if (drivePausedBySpeed || driveSpeedMetersPerSecond() <= 0) {
+                updateRouteProgressVisuals(driveRouteMeasure, visualProgress, sample, true);
+                return true;
+            }
+
+            const targetBearing = lookAheadRouteBearing(driveRouteMeasure, visualProgress, sample);
+            const cameraBearing = smoothDriveBearing(targetBearing, deltaSeconds || (1 / 60));
+
+            map.jumpTo(firstPersonCamera(sample.point,
+                                         cameraBearing,
+                                         payload || driveCameraPayload(),
+                                         fallbackZoom,
+                                         fallbackPitch));
+
+            updateRouteProgressVisuals(driveRouteMeasure, visualProgress, sample, false);
+            return true;
+        }
+
+        function driveFrame(now) {
+            driveAnimationFrame = 0;
+
+            if (!driveAnimationActive || !driveRouteMeasure || !driveRouteMeasure.total)
+                return;
+
+            const speedMps = driveSpeedMetersPerSecond();
+            if (speedMps <= 0) {
+                drivePausedBySpeed = true;
+                driveFilteredSpeedMps = 0;
+                driveLastFrameTime = 0;
+                cancelDriveFrame();
+                return;
+            }
+
+            if (!driveLastFrameTime)
+                driveLastFrameTime = now;
+
+            const deltaSeconds = Math.max(0, Math.min(0.075, (now - driveLastFrameTime) / 1000.0));
+            driveLastFrameTime = now;
+
+            const filteredSpeedMps = smoothedDriveSpeedMetersPerSecond(speedMps, deltaSeconds);
+            driveProgressMeters = Math.min(driveRouteMeasure.total,
+                                           driveProgressMeters + filteredSpeedMps * deltaSeconds);
+
+            renderDrivePosition(driveCameraPayload(), undefined, undefined, deltaSeconds);
+
+            if (driveVisualProgressMeters >= driveRouteMeasure.total - 0.25
+                    || driveProgressMeters >= driveRouteMeasure.total) {
+                driveAnimationActive = false;
+                driveLastFrameTime = 0;
+                sendCameraToQml();
+                return;
+            }
+
+            driveAnimationFrame = window.requestAnimationFrame(driveFrame);
+        }
+
+        function scheduleDriveFrame() {
+            if (!driveAnimationActive || driveAnimationFrame || drivePausedBySpeed || driveSpeedMetersPerSecond() <= 0)
+                return;
+
+            driveAnimationFrame = window.requestAnimationFrame(driveFrame);
+        }
+
+        function startDriveAnimation(payload, center, fallbackZoom, fallbackPitch) {
+            if (!payload || !payload.driveAnimationEnabled)
+                return false;
+
+            if (!acceptPayloadSession(payload))
+                return false;
+
+            const start = driveStartPoint(payload, center);
+            const end = driveEndPoint(payload, start);
+            const route = routeFromPayload(payload, start, end);
+            const measure = buildRouteMeasure(route);
+            if (!measure.segments.length || measure.total <= 0) {
+                console.warn("GOONG_DRIVE_ANIMATION_SKIPPED_NO_ROUTE");
+                return false;
+            }
+
+            const nextRouteKey = routeIdentity(route);
+            const routeChanged = nextRouteKey !== driveRouteKey;
+
+            cancelDriveFrame();
+            try { map.stop(); } catch (e) {}
+
+            if (routeChanged) {
+                driveRouteKey = nextRouteKey;
+                appliedRouteKey = "";
+                driveProgressMeters = 0;
+                driveVisualProgressMeters = 0;
+                driveFilteredSpeedMps = 0;
+                driveCameraBearing = NaN;
+                lastRouteVisualUpdateMs = 0;
+                lastProgressPublishMs = 0;
+            }
+
+            drivePayload = payload;
+            driveRouteMeasure = measure;
+            driveAnimationActive = true;
+            driveLastFrameTime = 0;
+
+            setRoute(route, routeChanged);
+            updateDriveTelemetry(payload);
+
+            if (drivePausedBySpeed || driveSpeedMetersPerSecond() <= 0) {
+                updateRouteProgressVisuals(driveRouteMeasure,
+                                           driveVisualProgressMeters,
+                                           pointAtRouteDistance(driveRouteMeasure, driveVisualProgressMeters),
+                                           true);
+                return true;
+            }
+
+            renderDrivePosition(payload, fallbackZoom, fallbackPitch, 1 / 60);
+            scheduleDriveFrame();
+
+            return true;
+        }
+
+        function applyPayload(payload) {
+            if (!payload)
+                return;
+
+            if (payload.forceRouteReset || payload.clearNavigationState) {
+                clearNavigationState(payload.navigationSessionId);
+                return;
+            }
+
+            if (!acceptPayloadSession(payload))
+                return;
+
+            lastPayload = payload;
+
+            if (updateProviderConfig(payload)) {
+                map.setStyle(buildStyleUrl());
+                return;
+            }
+
+            if (!map.isStyleLoaded()) {
+                window.setTimeout(function () {
+                    if (isPayloadSessionStillValid(payload))
+                        applyPayload(payload);
+                }, 80);
+                return;
+            }
+
+            const center = pointFeature(payload.center) || DEFAULT_CENTER;
+            const route = normalizedRoute(payload.route);
+            const hasRoute = route.length > 1;
+            const driveActive = !!payload.driveActive;
+            const driveEnabled = !!payload.driveAnimationEnabled;
+
+            ensureGoongBuildingLayers();
+
+            const enabled3d = !!payload.enabled3d;
+            set3d(enabled3d);
+            updateDriveTelemetry(payload);
+
+            if (!hasRoute || !driveActive || !driveEnabled) {
+                if (driveAnimationActive)
+                    stopDriveAnimation(true);
+
+                if (!hasRoute) {
+                    setRoute([], true);
+                    return;
+                }
+
+                /* Không tự update camera nếu không ở drive mode. Tránh nhảy về camera cũ. */
+                setRoute(route, false);
+                return;
+            }
+
+            if (drivePausedBySpeed || driveSpeedMetersPerSecond() <= 0) {
+                setRoute(route, false);
+                suppressCameraLogs(900);
+                if (driveRouteMeasure && driveRouteMeasure.total) {
+                    const frozen = Number.isFinite(driveVisualProgressMeters)
+                            ? driveVisualProgressMeters
+                            : driveProgressMeters;
+                    driveProgressMeters = Math.max(0, Math.min(driveRouteMeasure.total, frozen));
+                    driveVisualProgressMeters = driveProgressMeters;
+                    updateRouteProgressVisuals(driveRouteMeasure,
+                                               driveVisualProgressMeters,
+                                               pointAtRouteDistance(driveRouteMeasure, driveVisualProgressMeters),
+                                               true);
+                }
+                return;
+            }
+
+            if (payload.startDriveAnimation || !driveAnimationActive) {
+                if (startDriveAnimation(payload, center,
+                        Number.isFinite(payload.zoom) ? payload.zoom : map.getZoom(),
+                        Number.isFinite(payload.pitch) ? payload.pitch : map.getPitch()))
+                    return;
+            }
+
+            if (driveAnimationActive) {
+                drivePayload = payload;
+                renderDrivePosition(payload,
+                                    Number.isFinite(payload.zoom) ? payload.zoom : map.getZoom(),
+                                    Number.isFinite(payload.pitch) ? payload.pitch : map.getPitch(),
+                                    1 / 60);
+                scheduleDriveFrame();
+            }
+        }
+
+        window.navigationMap = {
+            resetStyle: function (vectorTileUrl, sourceLayer, goongKey, goongStyle) {
+                configuredBuildingLayer = sourceLayer || DEFAULT_GOONG_BUILDING_LAYER;
+                goongMapTilesKey = goongKey || goongMapTilesKey;
+                goongStyleUrl = goongStyle || goongStyleUrl || DEFAULT_GOONG_STYLE_URL;
+
+                //setDebug("GOONG_RESET_3D_STYLE");
+                map.setStyle(buildStyleUrl());
+            },
+
+            update: function (payload) {
+                applyPayload(payload);
+            },
+
+            setDriveSpeed: function (speedKph, stoppedThresholdKph) {
+                setDriveSpeed(speedKph, stoppedThresholdKph, true);
+            },
+
+            stopDriveAnimation: function () {
+                stopDriveAnimation(true);
+            },
+
+            clearNavigationState: function (sessionId) {
+                clearNavigationState(sessionId);
+            }
+        };
+    </script>
+</body>
+</html>
