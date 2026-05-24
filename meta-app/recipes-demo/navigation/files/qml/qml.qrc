@@ -1,0 +1,12 @@
+<RCC>
+    <qresource prefix="/">
+        <file>ButtonControl.qml</file>
+        <file>Navigation.qml</file>
+        <file>RouteInfomation.qml</file>
+        <file>RouteListDelegate.qml</file>
+        <file>RouteListHeader.qml</file>
+        <file>TextEffect.qml</file>
+        <file>BorderColor.qml</file>
+        <file>helper.js</file>
+    </qresource>
+</RCC>

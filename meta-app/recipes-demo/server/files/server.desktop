@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AGL Server State UI
+Comment=AGL Server State UI
+Exec=/usr/bin/server
+Icon=server
+Type=Application
+Terminal=false
+Categories=Application;

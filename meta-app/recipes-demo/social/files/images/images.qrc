@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/images">
+        <file>background.png</file>
+        <file>Roboto-BoldCondensed.ttf</file>
+    </qresource>
+</RCC>

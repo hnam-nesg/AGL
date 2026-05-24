@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AGL Assistant
+Comment=AGL assistant Qt Application
+Exec=/usr/bin/assistant
+Icon=assistant
+Type=Application
+Terminal=false
+Categories=Application;

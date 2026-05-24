@@ -1,0 +1,62 @@
+# Git / repo tool
+.git/
+.repo/
+
+# Yocto / AGL build output
+build/
+build-*/
+tmp/
+tmp-*/
+tmp-glibc/
+downloads/
+sstate-cache/
+cache/
+deploy/
+work/
+workspace/
+
+# Common generated folders
+out/
+output/
+dist/
+node_modules/
+__pycache__/
+
+# Images / archives / SDK / rootfs
+*.wic
+*.wic.*
+*.img
+*.iso
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.zip
+*.7z
+*.ext4
+*.sdimg
+*.rootfs.*
+*.manifest
+*.spdx.*
+
+# Binary/build files
+*.o
+*.a
+*.so
+*.so.*
+*.bin
+*.elf
+*.map
+*.dtb
+*.dtbo
+
+# Logs
+*.log
+*.pid
+*.lock
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~

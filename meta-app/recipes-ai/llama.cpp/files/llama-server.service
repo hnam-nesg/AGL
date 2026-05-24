@@ -1,0 +1,19 @@
+[Unit]
+Description=llama.cpp local inference server
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/llama-server
+ExecStart=/usr/bin/llama-server \
+    -m ${MODEL_PATH} \
+    --host ${HOST} \
+    --port ${PORT} \
+    -c ${CTX_SIZE} \
+    -t ${THREADS} \
+    -ngl ${NGL}
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

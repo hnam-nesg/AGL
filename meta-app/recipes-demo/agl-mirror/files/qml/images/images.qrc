@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="images/">
+        <file>mirror-left.png</file>
+        <file>mirror-right.png</file>
+        <file>Roboto-BoldCondensed.ttf</file>
+        <file>background.png</file>
+        <file>line_devider.png</file>
+    </qresource>
+</RCC>

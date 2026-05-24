@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AGL Phone
+Comment=AGL phone Qt Application
+Exec=/usr/bin/phone
+Icon=phone
+Type=Application
+Terminal=false
+Categories=Application;

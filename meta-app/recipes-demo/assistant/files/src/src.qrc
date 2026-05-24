@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>main.cpp</file>
+        <file>SpeechRecognizer.h</file>
+        <file>SpeechRecognizer.cpp</file>
+    </qresource>
+</RCC>

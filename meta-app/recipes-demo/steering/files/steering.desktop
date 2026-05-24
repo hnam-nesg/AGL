@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AGL Steering
+Comment=AGL Steering Qt Application
+Exec=/usr/bin/steering
+Icon=steering
+Type=Application
+Terminal=false
+Categories=Application;

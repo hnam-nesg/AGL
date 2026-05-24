@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/images">
+        <file>Roboto-BoldCondensed.ttf</file>
+        <file>taillight.png</file>
+        <file>light_auto.png</file>
+        <file>fog_light_l.png</file>
+        <file>fog_light_r.png</file>
+        <file>headlight.png</file>
+        <file>settings.png</file>
+        <file>light_off.png</file>
+        <file>qwantani_mid_morning_puresky_1k.hdr</file>
+    </qresource>
+</RCC>

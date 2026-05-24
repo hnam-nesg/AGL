@@ -1,0 +1,14 @@
+[Unit]
+Description=AGL Server Service
+After=homescreen.service applaunchd.service launcher.service
+Wants=homescreen.service applaunchd.service launcher.service
+
+[Service]
+Type=simple
+User=agl-driver
+Environment=XDG_RUNTIME_DIR=/run/user/1001
+ExecStart=/usr/bin/server
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

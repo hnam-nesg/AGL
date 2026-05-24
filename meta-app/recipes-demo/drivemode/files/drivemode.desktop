@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AGL Drivemode
+Comment=AGL Drivemode Qt Application
+Exec=/usr/bin/drivemode
+Icon=drivemode
+Type=Application
+Terminal=false
+Categories=Application;

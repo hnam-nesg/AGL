@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/">
+        <file>Settings.qml</file>
+        <file>BorderColor.qml</file>
+        <file>ButtonControl.qml</file>
+        <file>Background.qml</file>
+        <file>HL_Button.qml</file>
+        <file>SwitchButton.qml</file>
+        <file>Device.qml</file>
+    </qresource>
+</RCC>

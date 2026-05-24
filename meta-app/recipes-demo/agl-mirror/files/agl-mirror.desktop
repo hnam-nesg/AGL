@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AGL Mirror
+Comment=AGL Mirror Qt Application
+Exec=/usr/bin/agl-mirror
+Icon=agl-mirror
+Type=Application
+Terminal=false
+Categories=Application;

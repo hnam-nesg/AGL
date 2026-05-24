@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package uistate;
+
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  SNAPSHOT = 1;
+  UPDATED = 2;
+}
+
+message UiElementState {
+  string target_id = 1;
+  string icon_id = 2;
+  string text_color = 3;
+  string text = 4;
+  bool visible = 5;
+  bool enabled = 6;
+}
+
+message SetStateRequest {
+  UiElementState state = 1;
+}
+
+message SetStateReply {
+  bool ok = 1;
+  string message = 2;
+  uint64 version = 3;
+}
+
+message GetStateRequest {
+  string target_id = 1;
+}
+
+message GetStateReply {
+  bool found = 1;
+  UiElementState state = 2;
+  uint64 version = 3;
+}
+
+message SubscribeStateRequest {
+  bool send_snapshot = 1;
+}
+
+message UiStateEvent {
+  EventType type = 1;
+  UiElementState state = 2;
+  uint64 version = 3;
+  int64 timestamp_ms = 4;
+}
+
+service UiStateService {
+  rpc SetState(SetStateRequest) returns (SetStateReply);
+  rpc GetState(GetStateRequest) returns (GetStateReply);
+  rpc SubscribeState(SubscribeStateRequest) returns (stream UiStateEvent);
+}

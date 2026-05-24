@@ -1,0 +1,217 @@
+# mytheme.script
+# Plymouth splash mô phỏng layout qnx_splashd:
+#   Lớp 1: nền đen
+#   Lớp 2: Panel.png      = nền vùng màn hình trong
+#   Lớp 3: suzuki_logo.png/logo.png = logo splash ở giữa
+#   Lớp 4: Panel_2.png    = khung kim loại ngoài, phủ sau cùng
+#
+# Đặt các ảnh trong cùng thư mục theme:
+#   Panel.png
+#   Panel_2.png
+#   suzuki_logo.png
+#
+# Nếu bạn chỉ có logo.png thì đổi dòng LOGO_FILE bên dưới thành "logo.png".
+
+PANEL_FILE = "Panel.png";
+FRAME_FILE = "Panel_2.png";
+LOGO_FILE  = "suzuki_logo.png";
+
+screen_w = Window.GetWidth();
+screen_h = Window.GetHeight();
+
+base_w = 1280;
+base_h = 800;
+
+scale_x = screen_w / base_w;
+scale_y = screen_h / base_h;
+
+# ----------------------------
+# Helpers
+# ----------------------------
+
+fun sx(v)
+{
+    return v * scale_x;
+}
+
+fun sy(v)
+{
+    return v * scale_y;
+}
+
+fun center_x(w)
+{
+    return (screen_w - w) / 2;
+}
+
+fun center_y(h)
+{
+    return (screen_h - h) / 2;
+}
+
+fun fit_width(img, max_w, max_h)
+{
+    iw = img.GetWidth();
+    ih = img.GetHeight();
+
+    if (iw <= 0 || ih <= 0) {
+        return img;
+    }
+
+    rw = max_w / iw;
+    rh = max_h / ih;
+
+    r = rw;
+    if (rh < rw) {
+        r = rh;
+    }
+
+    out_w = iw * r;
+    out_h = ih * r;
+
+    if (out_w < 1) {
+        out_w = 1;
+    }
+
+    if (out_h < 1) {
+        out_h = 1;
+    }
+
+    return img.Scale(out_w, out_h);
+}
+
+# ----------------------------
+# Images
+# ----------------------------
+
+panel_image_raw = Image(PANEL_FILE);
+frame_image_raw = Image(FRAME_FILE);
+logo_image_raw  = Image(LOGO_FILE);
+
+# Giống qnx_splashd:
+# Panel.png: x=10, y=-25, w=1260, h=800 theo base 1280x800
+panel_w = sx(1260);
+panel_h = sy(800);
+panel_x = sx(10);
+panel_y = sy(-25);
+
+panel_image = panel_image_raw.Scale(panel_w, panel_h);
+
+# Panel_2.png: x=-180, y=-130, w=1640, h=1060 theo base 1280x800
+frame_w = sx(1640);
+frame_h = sy(1060);
+frame_x = sx(-180);
+frame_y = sy(-130);
+
+frame_image = frame_image_raw.Scale(frame_w, frame_h);
+
+# Logo nằm trong vùng panel, giống drawPanelSplashContent()
+area_x = 0;
+area_y = 0;
+area_w = screen_w;
+area_h = screen_h;
+
+cx = area_x + area_w / 2;
+cy = area_y + area_h / 2 - area_h / 35;
+
+logo_max_w = area_w * 58 / 100;
+logo_max_h = area_h * 63 / 100;
+
+if (logo_max_w > sx(560)) {
+    logo_max_w = sx(560);
+}
+
+if (logo_max_h > sy(500)) {
+    logo_max_h = sy(500);
+}
+
+logo_image = fit_width(logo_image_raw, logo_max_w, logo_max_h);
+logo_w = logo_image.GetWidth();
+logo_h = logo_image.GetHeight();
+logo_x = cx - logo_w / 2;
+logo_y = cy - logo_h / 2;
+
+# ----------------------------
+# Sprites / Z-order
+# ----------------------------
+
+# Nền đen fallback bằng ảnh text trống không cần; Plymouth tự nền đen nếu theme không vẽ full.
+panel_sprite = Sprite(panel_image);
+panel_sprite.SetX(panel_x);
+panel_sprite.SetY(panel_y);
+panel_sprite.SetZ(10);
+panel_sprite.SetOpacity(1);
+
+logo_sprite = Sprite(logo_image);
+logo_sprite.SetX(logo_x);
+logo_sprite.SetY(logo_y);
+logo_sprite.SetZ(30);
+logo_sprite.SetOpacity(1);
+
+# Khung phải nằm sau cùng để che phần splash/ảnh tràn mép.
+frame_sprite = Sprite(frame_image);
+frame_sprite.SetX(frame_x);
+frame_sprite.SetY(frame_y);
+frame_sprite.SetZ(100);
+frame_sprite.SetOpacity(1);
+
+# Text nhỏ để debug lúc boot. Muốn ẩn thì set DEBUG_TEXT = 0.
+DEBUG_TEXT = 0;
+
+debug_image = Image.Text("AGL CLUSTER", 0.70, 0.90, 1.00);
+debug_sprite = Sprite(debug_image);
+debug_sprite.SetX(center_x(debug_image.GetWidth()));
+debug_sprite.SetY(sy(690));
+debug_sprite.SetZ(40);
+
+if (DEBUG_TEXT == 1) {
+    debug_sprite.SetOpacity(0.70);
+} else {
+    debug_sprite.SetOpacity(0);
+}
+
+# ----------------------------
+# Animation
+# ----------------------------
+# Plymouth script không vẽ pixel-level shimmer như qnx_splashd::drawLogoShimmer().
+# Thay bằng hiệu ứng pulse nhẹ cho logo để không gây giật trong giai đoạn boot.
+
+fun refresh_callback ()
+{
+    t = Plymouth.GetTime();
+
+    # Pulse nhẹ: opacity khoảng 0.86 -> 1.00.
+    # Đây là phần thay cho shimmer pixel-level của qnx_splashd.
+    logo_opacity = 0.93 + 0.07 * Math.Sin(t * 3.2);
+
+    if (logo_opacity < 0.86) {
+        logo_opacity = 0.86;
+    }
+
+    if (logo_opacity > 1.00) {
+        logo_opacity = 1.00;
+    }
+
+    panel_sprite.SetOpacity(1);
+    frame_sprite.SetOpacity(1);
+    logo_sprite.SetOpacity(logo_opacity);
+}
+
+fun boot_progress_callback (duration, progress)
+{
+    # Không vẽ progress bar để giữ giống qnx_splash hiện tại.
+    # Nếu cần dùng progress, có thể thêm sprite riêng tại đây.
+}
+
+fun quit_callback ()
+{
+    # Fade nhẹ khi Plymouth thoát.
+    logo_sprite.SetOpacity(0);
+    panel_sprite.SetOpacity(0);
+    frame_sprite.SetOpacity(0);
+    debug_sprite.SetOpacity(0);
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);
+Plymouth.SetBootProgressFunction(boot_progress_callback);
+Plymouth.SetQuitFunction(quit_callback);

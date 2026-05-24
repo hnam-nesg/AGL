@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AGL Mediaplayer
+Comment=AGL mediaplayer Qt Application
+Exec=/usr/bin/mediaplayer
+Icon=mediaplayer
+Type=Application
+Terminal=false
+Categories=Application;

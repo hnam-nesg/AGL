@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/images">
+        <file>Roboto-BoldCondensed.ttf</file>
+        <file>call_reject.png</file>
+        <file>phone-call.png</file>
+        <file>blue.jpg</file>
+    </qresource>
+</RCC>

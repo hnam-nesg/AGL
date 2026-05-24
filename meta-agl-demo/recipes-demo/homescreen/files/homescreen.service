@@ -1,0 +1,15 @@
+[Unit]
+Requires=agl-compositor.service applaunchd.service
+After=agl-compositor.service applaunchd.service
+Before=graphical.target
+
+[Service]
+Type=simple
+User=agl-driver
+Environment=XDG_RUNTIME_DIR=/run/user/1001/
+EnvironmentFile=-/etc/default/homescreen
+ExecStart=/usr/bin/homescreen
+Restart=on-failure
+
+[Install]
+WantedBy=graphical.target
