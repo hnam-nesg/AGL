@@ -38,6 +38,8 @@ ApplicationWindow {
             var totalSeconds = Number(sec)
             if (!isFinite(totalSeconds) || totalSeconds < 0)
                 return ""
+            if (totalSeconds <= 0)
+                return qsTr("0 phút")
 
             var totalMinutes = Math.max(1, Math.round(totalSeconds / 60))
             var hours = Math.floor(totalMinutes / 60)
@@ -144,7 +146,7 @@ ApplicationWindow {
 
         function updateEstimate() {
             var travelTime = root.displayTravelTimeSeconds
-            if (isFinite(travelTime) && travelTime > 0) {
+            if (isFinite(travelTime) && travelTime >= 0) {
                 time_estimate.contentText = Qt.formatTime(new Date(Date.now() + travelTime * 1000), "hh:mm")
                 return
             }
@@ -171,6 +173,8 @@ ApplicationWindow {
             root.hasRoute = false
             root.guidanceActive = false
             fallbackLine.path = []
+            root.resetDriveProgress()
+            mapView.clearNavigationState()
             clearRouteInfo(message || qsTr("Không tìm thấy tuyến đường"))
         }
 
@@ -249,6 +253,168 @@ ApplicationWindow {
             return true
         }
 
+        function currentRouteData() {
+            var route = root.activeRouteData
+            if (!route && routeModel.count > 0)
+                route = routeModel.get(0)
+            return route
+        }
+
+        function routeDistanceMetersValue(route, fallbackMeters) {
+            var direct = Number(route && route.distance)
+            if (isFinite(direct) && direct > 0)
+                return direct
+
+            var fallback = Number(fallbackMeters)
+            if (isFinite(fallback) && fallback > 0)
+                return fallback
+
+            var total = 0
+            var segments = route && route.segments ? route.segments : []
+            for (var i = 0; i < segments.length; ++i)
+                total += segmentDistanceMeters(segments[i])
+            return total
+        }
+
+        function segmentDistanceMeters(segment) {
+            var maneuver = segment && segment.maneuver ? segment.maneuver : {}
+            var value = Number(maneuver.distanceToNextInstruction)
+            return isFinite(value) && value > 0 ? value : 0
+        }
+
+        function remainingTravelTimeSeconds(route, totalMeters, remainingMeters, progressSeconds) {
+            var total = Number(totalMeters)
+            var remaining = Number(remainingMeters)
+            var routeTime = routeTravelTimeSeconds(route)
+            if (isFinite(total) && total > 0 && isFinite(remaining) && remaining >= 0
+                    && isFinite(routeTime) && routeTime > 0)
+                return Math.max(0, routeTime * remaining / total)
+
+            var direct = Number(progressSeconds)
+            if (isFinite(direct) && direct >= 0)
+                return direct
+
+            return Number.NaN
+        }
+
+        function setArrivalGuidance() {
+            if (root.routeArrived)
+                return
+
+            root.routeArrived = true
+            root.guidanceActive = false
+            root.followPosition = false
+            root.hasDriveProgressCoord = true
+            if (root.coordValid(root.destCoord)) {
+                root.commitCurrentPosition(root.destCoord,
+                                           root.destName.length > 0 ? root.destName : qsTr("Vị trí hiện tại"))
+            }
+
+            var arrivedBearing = root.routeBearingAt(root.driveProgressCoord)
+            root.driveProgressHeading = isFinite(arrivedBearing)
+                    ? root.normalizedBearing(arrivedBearing)
+                    : root.driveProgressHeading
+            root.driveRouteRemainingMeters = 0
+            root.driveRouteRemainingSeconds = 0
+
+            routeInfoModel.clear()
+            routeInfoModel.append({
+                "instruction": qsTr("Bạn đã đến nơi"),
+                "distance": qsTr("0 m"),
+                "icon": "images/icons8-arrow-up-94.png"
+            })
+            ins.contentText = qsTr("Bạn đã đến nơi")
+            root.nextGuideText = qsTr("")
+            root.nextGuideIcon = "images/icons8-arrow-up-94.png"
+            distance_target.contentText = qsTr("0 m")
+            root.displayTravelTimeSeconds = 0
+            time.contentText = rect_.formatTime(0)
+            distance.contentText = qsTr("0 m")
+            time_estimate.contentText = Qt.formatTime(new Date(), "hh:mm")
+            image_turn.source = "images/icons8-arrow-up-94.png"
+
+            root.activeRouteData = null
+            root.usingFallbackRoute = false
+            root.hasRoute = false
+            root.hasDestPlace = false
+            fallbackLine.path = []
+            display_route.y = 800
+            mapView.height = root.height
+            mapView.followExternalCenter = true
+            mapView.clearNavigationState()
+            mapView.scheduleSync()
+            searchOverlay.visible = true
+            searchOverlay.mode = "destination"
+            searchOverlay.dbusNavigationActive = false
+            searchOverlay.hasSelectedPlace = false
+            searchOverlay.searchStarted = false
+            searchOverlay.setSearchText("")
+            searchOverlay.dismissSearchUi()
+            root.publishRouteState()
+        }
+
+        function updateGuidanceFromProgress(progressMeters, totalMeters, remainingMeters, remainingSeconds) {
+            var route = currentRouteData()
+            var segments = route && route.segments ? route.segments : []
+            if (!route || segments.length === 0)
+                return
+
+            var total = routeDistanceMetersValue(route, totalMeters)
+            var progress = Math.max(0, Number(progressMeters))
+            if (!isFinite(progress))
+                progress = 0
+
+            var remaining = Number(remainingMeters)
+            if (!isFinite(remaining) || remaining < 0)
+                remaining = isFinite(total) && total > 0 ? Math.max(0, total - progress) : 0
+
+            if ((isFinite(total) && total > 0 && progress >= total - 1) || remaining <= 3) {
+                setArrivalGuidance()
+                return
+            }
+
+            var traveledBefore = 0
+            var currentIndex = 0
+            var distanceToNext = remaining
+
+            for (var i = 0; i < segments.length; ++i) {
+                var segmentDistance = segmentDistanceMeters(segments[i])
+                if (progress <= traveledBefore + Math.max(1, segmentDistance) || i === segments.length - 1) {
+                    currentIndex = i
+                    distanceToNext = Math.max(0, traveledBefore + segmentDistance - progress)
+                    break
+                }
+                traveledBefore += segmentDistance
+            }
+
+            routeInfoModel.clear()
+            for (var j = currentIndex; j < segments.length; ++j) {
+                var maneuver = segments[j].maneuver || {}
+                var localized = rect_.localizeInstruction(maneuver.instructionText || "")
+                routeInfoModel.append({
+                    "instruction": localized,
+                    "distance": rect_.formatDistance(j === currentIndex ? distanceToNext : rect_.segmentDistanceMeters(segments[j])),
+                    "icon": rect_.turnIcon(localized)
+                })
+            }
+
+            var currentManeuver = segments[currentIndex].maneuver || {}
+            var nextManeuver = currentIndex + 1 < segments.length
+                    ? (segments[currentIndex + 1].maneuver || {})
+                    : currentManeuver
+            var firstInstruction = currentManeuver.instructionText || qsTr("Tiếp tục")
+            var nextInstruction = nextManeuver.instructionText || firstInstruction
+            ins.contentText = rect_.localizeInstruction(firstInstruction)
+            root.nextGuideText = rect_.localizeInstruction(nextInstruction || "")
+            root.nextGuideIcon = rect_.turnIcon(nextInstruction || "")
+            distance_target.contentText = rect_.formatDistance(distanceToNext)
+            root.displayTravelTimeSeconds = rect_.remainingTravelTimeSeconds(route, total, remaining, remainingSeconds)
+            time.contentText = rect_.formatTime(root.displayTravelTimeSeconds)
+            distance.contentText = rect_.formatDistance(remaining)
+            image_turn.source = rect_.turnIcon(firstInstruction)
+            rect_.updateEstimate()
+        }
+
             function fitRoute() {
                 var start = root.startCoord
                 var dest = root.destCoord
@@ -309,8 +475,10 @@ ApplicationWindow {
             property string nextGuideText: ""
             property real displayTravelTimeSeconds: Number.NaN
             property var activeRouteData: null
+            property int routeSessionId: 0
             property bool usingFallbackRoute: false
             property bool hasRoute: false
+            property bool routeArrived: false
             property bool gpsFixReceived: false
             property bool guidanceActive: false
             property bool followPosition: true
@@ -323,6 +491,26 @@ ApplicationWindow {
             property real previewZoomBoost: 0.7
             property real guidanceMarkerOffsetMeters: 58
             property string nextGuideIcon: "images/icons8-arrow-up-94.png"
+            property bool hasDriveProgressCoord: false
+            property var driveProgressCoord: startCoord
+            property real driveProgressHeading: 0
+            property real driveProgressMeters: 0
+            property real driveRouteTotalMeters: 0
+            property real driveRouteRemainingMeters: 0
+            property real driveRouteRemainingSeconds: -1
+            property real driveLastTickMs: 0
+            property real simulatedDriveSpeedKph: 150
+
+            Timer {
+                id: driveSimulationTimer
+                interval: 160
+                repeat: true
+                running: root.guidanceActive && root.hasRoute && root.hasDestPlace && !root.routeArrived
+                onTriggered: root.advanceDriveSimulation()
+                onRunningChanged: {
+                    root.driveLastTickMs = running ? Date.now() : 0
+                }
+            }
 
             function coordValid(coord) {
                 return coord
@@ -356,14 +544,53 @@ ApplicationWindow {
             property bool hasLivePos: true
             property var gpsCoord: root.hasRealGps ? ps.position.coordinate : root.sampleCoord
             property var currentCoord: root.hasLivePos ? root.gpsCoord : root.startCoord
-            property var searchBiasCoord: root.hasLivePos ? root.gpsCoord : (root.hasStartPlace ? root.startCoord : root.defaultCoord)
+            property var searchBiasCoord: root.hasDriveProgressCoord && root.coordValid(root.driveProgressCoord)
+                                          ? root.driveProgressCoord
+                                          : (root.hasStartPlace ? root.startCoord : root.gpsCoord)
             property real currentHeading: 0
 
             function currentLocationName() {
+                if (root.hasDriveProgressCoord && root.startName.length > 0)
+                    return root.startName
                 return root.hasRealGps ? qsTr("Vị trí định vị hiện tại") : root.sampleLocationName
             }
 
+            function currentMarkerCoord() {
+                if ((root.guidanceActive || root.hasDriveProgressCoord) && root.coordValid(root.driveProgressCoord))
+                    return root.driveProgressCoord
+                if (root.routeArrived && root.coordValid(root.destCoord))
+                    return root.destCoord
+                if (root.coordValid(root.startCoord))
+                    return root.startCoord
+                if (root.hasRealGps && root.coordValid(root.gpsCoord))
+                    return root.gpsCoord
+                return root.currentCoord
+            }
+
+            function commitCurrentPosition(coord, label) {
+                var next = root.coordValid(coord) ? coord : root.currentMarkerCoord()
+                if (!root.coordValid(next))
+                    return false
+
+                var name = String(label || "").trim()
+                if (name.length === 0)
+                    name = qsTr("Vị trí hiện tại")
+
+                root.startCoord = next
+                root.startName = name
+                root.hasStartPlace = true
+                root.driveProgressCoord = next
+                root.hasDriveProgressCoord = true
+                root.sampleCoord = next
+                root.sampleLocationName = name
+                if (isFinite(root.driveProgressHeading))
+                    root.currentHeading = root.normalizedBearing(root.driveProgressHeading)
+                return true
+            }
+
             function guidanceCoord() {
+                if (root.guidanceActive && root.hasDriveProgressCoord && root.coordValid(root.driveProgressCoord))
+                    return root.driveProgressCoord
                 if (root.hasRealGps)
                     return root.gpsCoord
                 if (root.hasStartPlace)
@@ -371,7 +598,20 @@ ApplicationWindow {
                 return root.currentCoord
             }
 
+            function mapCurrentCoord() {
+                if (root.routeArrived && root.coordValid(root.destCoord))
+                    return root.destCoord
+                if (root.guidanceActive)
+                    return root.guidanceCoord()
+                if (root.hasDriveProgressCoord && root.coordValid(root.driveProgressCoord))
+                    return root.driveProgressCoord
+                return root.hasLivePos && !root.hasStartPlace ? root.gpsCoord : root.startCoord
+            }
+
             function vehicleHeading() {
+                if (root.guidanceActive && root.hasDriveProgressCoord && isFinite(root.driveProgressHeading))
+                    return root.normalizedBearing(root.driveProgressHeading)
+
                 if (root.hasRealGps && isFinite(root.currentHeading))
                     return root.normalizedBearing(root.currentHeading)
 
@@ -423,6 +663,55 @@ ApplicationWindow {
                 return []
             }
 
+            function activeRouteDistanceMeters() {
+                var path = root.activeRoutePath()
+                var total = 0
+                for (var i = 0; i < path.length - 1; ++i) {
+                    var distance = root.routeDistanceMeters(path[i], path[i + 1])
+                    if (isFinite(distance) && distance > 0)
+                        total += distance
+                }
+                return total
+            }
+
+            function routeSampleAtDistance(distanceMeters) {
+                var path = root.activeRoutePath()
+                if (!path || path.length < 2)
+                    return null
+
+                var target = Math.max(0, Number(distanceMeters))
+                if (!isFinite(target))
+                    target = 0
+
+                var traversed = 0
+                for (var i = 0; i < path.length - 1; ++i) {
+                    var from = path[i]
+                    var to = path[i + 1]
+                    var segmentDistance = root.routeDistanceMeters(from, to)
+                    if (!isFinite(segmentDistance) || segmentDistance <= 0)
+                        continue
+
+                    if (target <= traversed + segmentDistance || i === path.length - 2) {
+                        var ratio = Math.max(0, Math.min(1, (target - traversed) / segmentDistance))
+                        var coord = QtPositioning.coordinate(from.latitude + (to.latitude - from.latitude) * ratio,
+                                                             from.longitude + (to.longitude - from.longitude) * ratio)
+                        return {
+                            "coord": coord,
+                            "bearing": root.bearingBetween(from, to)
+                        }
+                    }
+
+                    traversed += segmentDistance
+                }
+
+                var last = path[path.length - 1]
+                var previous = path[path.length - 2]
+                return {
+                    "coord": last,
+                    "bearing": root.bearingBetween(previous, last)
+                }
+            }
+
             function routePathJson() {
                 var path = root.activeRoutePath()
                 var points = []
@@ -434,8 +723,8 @@ ApplicationWindow {
             }
 
             function publishRouteState() {
-                var active = root.hasRoute && root.hasDestPlace
-                var current = active ? root.guidanceCoord() : root.currentCoord
+                var active = root.hasRoute && root.hasDestPlace && !root.routeArrived
+                var current = root.mapCurrentCoord()
                 var start = root.hasStartPlace ? root.startCoord : root.currentCoord
                 var dest = root.hasDestPlace ? root.destCoord : root.currentCoord
 
@@ -444,8 +733,8 @@ ApplicationWindow {
                                                         root.coordValid(current) ? current.longitude : Number.NaN,
                                                         root.coordValid(start) ? start.latitude : Number.NaN,
                                                         root.coordValid(start) ? start.longitude : Number.NaN,
-                                                        root.coordValid(dest) ? dest.latitude : Number.NaN,
-                                                        root.coordValid(dest) ? dest.longitude : Number.NaN,
+                                                        active && !root.routeArrived && root.coordValid(dest) ? dest.latitude : Number.NaN,
+                                                        active && !root.routeArrived && root.coordValid(dest) ? dest.longitude : Number.NaN,
                                                         active ? root.markerBearing() : 0,
                                                         active ? ins.contentText : qsTr(""),
                                                         active ? root.nextGuideText : qsTr(""),
@@ -453,6 +742,117 @@ ApplicationWindow {
                                                         active ? time.contentText : qsTr(""),
                                                         active ? root.routePathJson() : "[]",
                                                         active ? root.destName : qsTr(""))
+            }
+
+            function resetDriveProgress() {
+                root.routeArrived = false
+                root.hasDriveProgressCoord = false
+                root.driveProgressCoord = root.hasStartPlace ? root.startCoord : root.currentCoord
+                var initialBearing = root.routeBearingAt(root.driveProgressCoord)
+                root.driveProgressHeading = isFinite(initialBearing)
+                        ? root.normalizedBearing(initialBearing)
+                        : root.currentHeading
+                root.driveProgressMeters = 0
+                root.driveRouteTotalMeters = 0
+                root.driveRouteRemainingMeters = 0
+                root.driveRouteRemainingSeconds = -1
+                root.driveLastTickMs = 0
+            }
+
+            function syncMapViewDriveProgress() {
+                mapView.routeProgressMeters = root.driveProgressMeters
+                mapView.routeTotalMeters = root.driveRouteTotalMeters
+                mapView.routeRemainingMeters = root.driveRouteRemainingMeters
+                mapView.routeRemainingSeconds = root.driveRouteRemainingSeconds
+            }
+
+            function advanceDriveSimulation() {
+                if (!root.guidanceActive || !root.hasRoute || !root.hasDestPlace || root.routeArrived)
+                    return
+
+                var now = Date.now()
+                if (!isFinite(root.driveLastTickMs) || root.driveLastTickMs <= 0) {
+                    root.driveLastTickMs = now
+                    return
+                }
+
+                var deltaSeconds = Math.max(0, Math.min(0.5, (now - root.driveLastTickMs) / 1000.0))
+                root.driveLastTickMs = now
+                if (deltaSeconds <= 0)
+                    return
+
+                var total = root.driveRouteTotalMeters > 0
+                        ? root.driveRouteTotalMeters
+                        : root.activeRouteDistanceMeters()
+                if (!isFinite(total) || total <= 0)
+                    return
+
+                var speedMps = Math.max(0, root.simulatedDriveSpeedKph) / 3.6
+                if (speedMps <= 0)
+                    return
+
+                var progress = Math.min(total, root.driveProgressMeters + speedMps * deltaSeconds)
+                var sample = root.routeSampleAtDistance(progress)
+                if (sample && root.coordValid(sample.coord)) {
+                    root.driveProgressCoord = sample.coord
+                    root.hasDriveProgressCoord = true
+                    if (isFinite(sample.bearing))
+                        root.driveProgressHeading = root.normalizedBearing(sample.bearing)
+                }
+
+                root.driveProgressMeters = progress
+                root.driveRouteTotalMeters = total
+                root.driveRouteRemainingMeters = Math.max(0, total - progress)
+                root.driveRouteRemainingSeconds = root.driveRouteRemainingMeters / speedMps
+                root.syncMapViewDriveProgress()
+                mapView.scheduleSync()
+
+                rect_.updateGuidanceFromProgress(root.driveProgressMeters,
+                                                 root.driveRouteTotalMeters,
+                                                 root.driveRouteRemainingMeters,
+                                                 root.driveRouteRemainingSeconds)
+                if (!root.routeArrived)
+                    root.publishRouteState()
+            }
+
+            function applyDriveRouteProgress(progress) {
+                if (!progress || !root.hasRoute || !root.hasDestPlace || !root.guidanceActive)
+                    return
+
+                var lat = Number(progress.currentLatitude)
+                var lon = Number(progress.currentLongitude)
+                if (progress.currentLatitude !== null && progress.currentLongitude !== null
+                        && isFinite(lat) && isFinite(lon)) {
+                    var coord = QtPositioning.coordinate(lat, lon)
+                    if (root.coordValid(coord)) {
+                        root.driveProgressCoord = coord
+                        root.hasDriveProgressCoord = true
+                    }
+                }
+
+                var bearing = Number(progress.bearing)
+                if (progress.bearing !== null && isFinite(bearing))
+                    root.driveProgressHeading = root.normalizedBearing(bearing)
+
+                var progressMeters = Number(progress.progressMeters)
+                var totalMeters = Number(progress.totalMeters)
+                var remainingMeters = Number(progress.remainingMeters)
+                var remainingSeconds = Number(progress.remainingSeconds)
+                if (isFinite(progressMeters) && root.driveProgressMeters > 0
+                        && progressMeters + 2 < root.driveProgressMeters)
+                    return
+
+                root.driveProgressMeters = isFinite(progressMeters) ? Math.max(0, progressMeters) : 0
+                root.driveRouteTotalMeters = isFinite(totalMeters) ? Math.max(0, totalMeters) : 0
+                root.driveRouteRemainingMeters = isFinite(remainingMeters) ? Math.max(0, remainingMeters) : 0
+                root.driveRouteRemainingSeconds = isFinite(remainingSeconds) ? remainingSeconds : -1
+                root.syncMapViewDriveProgress()
+
+                rect_.updateGuidanceFromProgress(root.driveProgressMeters,
+                                                 root.driveRouteTotalMeters,
+                                                 root.driveRouteRemainingMeters,
+                                                 root.driveRouteRemainingSeconds)
+                root.publishRouteState()
             }
 
             function routeBearingAt(coord) {
@@ -606,14 +1006,16 @@ ApplicationWindow {
                 id: mapView
                 anchors.fill: parent
                 centerCoordinate: root.searchBiasCoord
-                currentCoordinate: root.guidanceActive ? root.guidanceCoord()
-                                   : (root.hasLivePos && !root.hasStartPlace ? root.gpsCoord : root.startCoord)
-                destinationCoordinate: root.hasDestPlace ? root.destCoord : null
+                currentCoordinate: root.mapCurrentCoord()
+                destinationCoordinate: root.hasDestPlace && !root.routeArrived ? root.destCoord : null
                 routePath: root.activeRoutePath()
                 zoomLevel: root.guidanceActive ? root.navigationZoom : root.previewZoom
                 pitch: root.guidanceActive ? root.navigationTilt : root.previewTilt
                 bearing: root.guidanceActive ? root.guidanceBearing() : 0
                 map3dEnabled: root.map3dEnabled
+                navigationActive: root.hasRoute && root.hasDestPlace && !root.routeArrived
+                driveSessionActive: root.guidanceActive && root.hasRoute && root.hasDestPlace && !root.routeArrived
+                routeSessionSeed: root.routeSessionId
                 rendererUrl: "qrc:/goong-map.html"
                 goongMapTilesKey: "Xgw2Eiqb38KmKuSsxQFH5c4NtEuORfbAdWfbxXIB"
                 goongStyleUrl: GoongStyleUrl
@@ -627,6 +1029,9 @@ ApplicationWindow {
                     root.followPosition = false
                     mapView.followExternalCenter = false
                     root.manualMapGestureActive = false
+                }
+                onRouteProgressUpdated: function(progress) {
+                    root.applyDriveRouteProgress(progress)
                 }
 
                 Behavior on height{NumberAnimation{duration: 200; easing.type: Easing.Linear}}
@@ -788,10 +1193,12 @@ ApplicationWindow {
                                 return
                             }
 
+                            root.routeSessionId += 1
                             root.usingFallbackRoute = false
                             root.activeRouteData = nextRoute
                             root.hasRoute = true
                             fallbackLine.path = []
+                            root.resetDriveProgress()
                             rect_.contentRoute()
                             if (root.guidanceActive) {
                                 root.applyGuidanceCamera(false)
@@ -1128,6 +1535,7 @@ ApplicationWindow {
                         return
                     }
 
+                    root.routeSessionId += 1
                     fallbackLine.path = pts
                     root.usingFallbackRoute = true
                     root.hasRoute = true
@@ -1141,6 +1549,7 @@ ApplicationWindow {
                         travelTime: routeDuration(route),
                         segments: routeSteps(route)
                     }
+                    root.resetDriveProgress()
 
                     if (!rect_.contentRoute())
                         return
@@ -1183,6 +1592,8 @@ ApplicationWindow {
                     root.usingFallbackRoute = false
                     root.hasRoute = false
                     fallbackLine.path = []
+                    root.resetDriveProgress()
+                    mapView.clearNavigationState()
                     rect_.clearRouteInfo(qsTr("Đang tính tuyến đường..."))
 
                     const start = root.startCoord
@@ -1241,8 +1652,9 @@ ApplicationWindow {
                                                    && mode === "destination" && !dbusNavigationActive
 
                 function searchBias() {
-                    if (root.hasLivePos)
-                        return root.gpsCoord
+                    var current = root.mapCurrentCoord()
+                    if (root.coordValid(current))
+                        return current
                     if (root.hasStartPlace)
                         return root.startCoord
                     return null
@@ -1393,6 +1805,7 @@ ApplicationWindow {
                 }
 
                 function showGuidance() {
+                    root.resetDriveProgress()
                     root.guidanceActive = true
                     root.followPosition = true
                     mapView.followExternalCenter = true
@@ -1407,8 +1820,10 @@ ApplicationWindow {
 
                 function showRoutePreview() {
                     root.guidanceActive = false
+                    root.resetDriveProgress()
                     root.followPosition = false
                     mapView.followExternalCenter = true
+                    mapView.stopDriveAnimation()
                     searchOverlay.visible = true
                     display_route.y = 800
                     mapView.height = root.height
@@ -1418,6 +1833,40 @@ ApplicationWindow {
                         root.applyPreviewCamera(true)
                     root.publishRouteState()
                     hideKeyboard()
+                }
+
+                function cancelRouteAtCurrentPosition() {
+                    const current = root.currentMarkerCoord()
+                    root.commitCurrentPosition(current, qsTr("Vị trí hiện tại"))
+                    root.routeArrived = false
+                    root.guidanceActive = false
+                    root.followPosition = true
+                    root.activeRouteData = null
+                    root.usingFallbackRoute = false
+                    root.hasRoute = false
+                    root.hasDestPlace = false
+                    root.destName = ""
+                    fallbackLine.path = []
+                    mapView.clearNavigationState()
+                    rect_.clearRouteInfo(qsTr(""))
+                    display_route.y = 800
+                    mapView.height = root.height
+                    mapView.followExternalCenter = true
+                    if (root.coordValid(current))
+                        mapView.map.center = current
+                    root.applyPreviewCamera(true)
+                    mode = "destination"
+                    dbusNavigationActive = false
+                    hasSelectedPlace = false
+                    searchStarted = false
+                    selectFirstWhenResultsArrive = false
+                    guidanceAfterGeocode = false
+                    visible = true
+                    setSearchText("")
+                    suggestionModel.clear()
+                    SearchController.clear()
+                    hideKeyboard()
+                    root.publishRouteState()
                 }
 
                 function quickSearch(query) {
@@ -1496,10 +1945,9 @@ ApplicationWindow {
                     fallbackLine.path = []
                     root.usingFallbackRoute = false
 
-                    if (root.hasLivePos) {
-                        root.startCoord = root.gpsCoord
-                        root.startName = root.currentLocationName()
-                        root.hasStartPlace = true
+                    const current = root.mapCurrentCoord()
+                    if (root.coordValid(current)) {
+                        root.commitCurrentPosition(current, root.currentLocationName())
                     } else {
                         root.hasStartPlace = false
                         root.startName = ""
@@ -1520,14 +1968,13 @@ ApplicationWindow {
                 }
 
                 function useGpsStart(startGuidance) {
-                    if (!root.hasLivePos) {
+                    const current = root.mapCurrentCoord()
+                    if (!root.coordValid(current)) {
                         rect_.routeError(qsTr("Chưa có tín hiệu định vị. Hãy nhập điểm bắt đầu"))
                         return
                     }
 
-                    root.startCoord = root.gpsCoord
-                    root.startName = root.currentLocationName()
-                    root.hasStartPlace = true
+                    root.commitCurrentPosition(current, root.currentLocationName())
                     mapView.followExternalCenter = true
                     suggestionModel.clear()
                     SearchController.clear()
@@ -1563,16 +2010,17 @@ ApplicationWindow {
                     SearchController.clear()
 
                     if (mode === "destination") {
+                        root.commitCurrentPosition(root.currentMarkerCoord(), qsTr("Vị trí hiện tại"))
                         root.hasDestPlace = false
                         root.destName = ""
                         root.activeRouteData = null
-                        root.startCoord = root.gpsCoord
-                        root.startName = root.currentLocationName()
                         root.hasStartPlace = true
                         fallbackLine.path = []
                         root.usingFallbackRoute = false
                         root.hasRoute = false
                         root.guidanceActive = false
+                        root.resetDriveProgress()
+                        mapView.clearNavigationState()
                         mapView.followExternalCenter = true
                     } else {
                         root.hasStartPlace = false
@@ -1580,6 +2028,8 @@ ApplicationWindow {
                         root.activeRouteData = null
                         root.hasRoute = false
                         root.guidanceActive = false
+                        root.resetDriveProgress()
+                        mapView.clearNavigationState()
                     }
 
                     display_route.y = 800
@@ -2297,7 +2747,7 @@ ApplicationWindow {
                     if (root.guidanceActive) {
                         root.applyGuidanceCamera(true)
                     } else {
-                        mapView.map.center = root.currentCoord
+                        mapView.map.center = root.mapCurrentCoord()
                         mapView.map.zoomLevel = Math.max(mapView.map.zoomLevel, 15)
                         root.applyPreviewCamera(false)
                     }
@@ -2541,7 +2991,7 @@ ApplicationWindow {
                     text: qsTr("Thoát")
                     focusPolicy: Qt.NoFocus
                     onClicked: {
-                        searchOverlay.showRoutePreview()
+                        searchOverlay.cancelRouteAtCurrentPosition()
                     }
                     background: Rectangle {
                         radius: 26

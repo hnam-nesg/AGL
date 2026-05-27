@@ -23,8 +23,14 @@ add_executable(navigation
     ${CMAKE_CURRENT_SOURCE_DIR}/src/navigationdbusservice.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/searchcontroller.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/searchcontroller.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/theme/ThemeSettingsManager.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/theme/ThemeSettingsManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/qml/qml.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/qml/images/images.qrc
+)
+
+target_include_directories(navigation PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/theme
 )
 
 target_link_libraries(navigation

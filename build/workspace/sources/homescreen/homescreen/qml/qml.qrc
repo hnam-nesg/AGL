@@ -1,6 +1,7 @@
 <RCC>
     <qresource prefix="/">
         <file>background_with_panels.qml</file>
+        <file>ShellContent.qml</file>
         <file>TopBar.qml</file>
         <file>ButtonControl.qml</file>
         <file>BottomBar.qml</file>

@@ -463,22 +463,13 @@ void AsrManager::setTtsAudioLevelCallback(std::function<void(double)> callback)
 
 void AsrManager::setPlaybackStateCallback(std::function<void(bool)> callback)
 {
-    playbackStateCallback_ = callback;
+    playbackStateCallback_ = std::move(callback);
 
-    tts_.setPlaybackStateCallback([this](bool active) {
-        setPlaybackActive(active);
-
-        if (playbackStateCallback_) {
-            playbackStateCallback_(active);
-        }
-    });
-    piper_tts_.setPlaybackStateCallback([this](bool active) {
-        setPlaybackActive(active);
-
-        if (playbackStateCallback_) {
-            playbackStateCallback_(active);
-        }
-    });
+    // AsrManager owns the assistant playback state. TTS backends may call
+    // stop() internally before synthesis/playback; forwarding those backend
+    // callbacks resets the wakeword state machine at the wrong time.
+    tts_.setPlaybackStateCallback({});
+    piper_tts_.setPlaybackStateCallback({});
 }
 
 void AsrManager::setConversationUpdateCallback(
@@ -487,6 +478,11 @@ void AsrManager::setConversationUpdateCallback(
     conversationUpdateCallback_ = std::move(callback);
 
     tts_.setPlaybackProgressCallback([this](double progress) {
+        if (conversationUpdateCallback_) {
+            conversationUpdateCallback_({}, {}, false, progress);
+        }
+    });
+    piper_tts_.setPlaybackProgressCallback([this](double progress) {
         if (conversationUpdateCallback_) {
             conversationUpdateCallback_({}, {}, false, progress);
         }

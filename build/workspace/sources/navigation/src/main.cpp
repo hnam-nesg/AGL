@@ -13,6 +13,7 @@
 #include "goongrestclient.h"
 #include "navigationdbusservice.h"
 #include "searchcontroller.h"
+#include "ThemeSettingsManager.h"
 
 int main(int argc, char *argv[]) {
     constexpr auto kChromiumFlags =
@@ -50,6 +51,7 @@ int main(int argc, char *argv[]) {
     SearchController searchController;
     GoongRestClient goongRestClient;
     NavigationDBusService navigationDBusService;
+    ThemeSettingsManager themeSettings;
     const QString goongRestApiKey =
         QProcessEnvironment::systemEnvironment().value(QStringLiteral("GOONG_REST_API_KEY"));
     searchController.setGoongRestApiKey(goongRestApiKey);
@@ -58,6 +60,7 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty("SearchController", &searchController);
     engine.rootContext()->setContextProperty("GoongRestClient", &goongRestClient);
     engine.rootContext()->setContextProperty("NavigationDBusService", &navigationDBusService);
+    engine.rootContext()->setContextProperty("themeSettings", &themeSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("GoongRestApiKey"), goongRestApiKey);
     engine.rootContext()->setContextProperty(
         QStringLiteral("GoongMapTilesKey"),

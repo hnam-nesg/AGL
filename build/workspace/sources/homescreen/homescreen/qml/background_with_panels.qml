@@ -1,15 +1,30 @@
 import QtQuick
+import QtQuick.Window
 
 Window {
     id: window
     visibility: Window.FullScreen
     flags: Qt.FramelessWindowHint
-    color: "#091018"
+    visible: true
+    color: "#000000"
+
+    property bool shellContextReady: false
+    property bool splashEffectDone: false
+    property bool shellLoaded: false
+    readonly property bool shellUiReady: shellLoaded
+                                        && shellContent.item
+                                        && shellContent.item.uiReady
+    readonly property bool shellReadyToShow: splashEffectDone && shellUiReady
 
     StartupSplash {
         anchors.fill: parent
-        opacity: shellContent.visible ? 0 : 1
+        z: 100
+        shimmerPasses: 2
+        shimmerSpeed: 0.5
+        opacity: window.shellReadyToShow ? 0 : 1
         visible: opacity > 0
+
+        onFinished: window.splashEffectDone = true
 
         Behavior on opacity {
             NumberAnimation { duration: 180 }
@@ -20,57 +35,23 @@ Window {
         id: shellContent
         anchors.fill: parent
         active: false
-        visible: false
-        opacity: visible ? 1 : 0
-        sourceComponent: shellComponent
+        asynchronous: true
+        visible: active
+        opacity: window.shellReadyToShow ? 1 : 0
+        source: "ShellContent.qml"
 
-        onLoaded: revealShell.start()
+        onLoaded: {
+            window.shellLoaded = true
+        }
 
         Behavior on opacity {
             NumberAnimation { duration: 180 }
         }
     }
 
-    Timer {
-        interval: 150
-        running: true
-        repeat: false
-        onTriggered: shellContent.active = true
-    }
-
-    Timer {
-        id: revealShell
-        interval: 80
-        repeat: false
-        onTriggered: shellContent.visible = true
-    }
-
-    Component {
-        id: shellComponent
-
-        Item {
-            anchors.fill: parent
-
-            Background {}
-
-            HomeScreen { id: homescreen }
-
-            TopBar { id: topbar }
-
-            BottomBar {
-                id: bottombar
-                onModeBottom: {
-                    leftbar.steering_checked = false; leftbar.light_checked = false; leftbar.mirror_checked = false; leftbar.glass_checked = false
-                }
-            }
-
-            LeftBar {
-                id: leftbar
-                anchors.top: topbar.bottom
-                onModeLeft: {
-                    bottombar.drive_mode = "white"; bottombar.home = "images/home.png"; bottombar.menu = "images/menu.png"; bottombar.camera = "images/camera.png"; bottombar.fan = "images/fan.png"
-                }
-            }
-        }
+    Binding {
+        target: shellContent
+        property: "active"
+        value: window.shellContextReady && window.splashEffectDone
     }
 }

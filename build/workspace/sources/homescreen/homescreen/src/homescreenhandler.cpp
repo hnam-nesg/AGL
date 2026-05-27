@@ -312,7 +312,7 @@ void HomescreenHandler::onNavigationRouteStateChanged(bool active,
 	m_navigationNextInstruction = nextInstruction;
 	m_navigationDistanceText = distanceText;
 	m_navigationTimeText = timeText;
-	m_navigationRoutePath = parseRoutePath(routePathJson);
+	m_navigationRoutePath = active ? parseRoutePath(routePathJson) : QVariantList();
 	m_navigationDestinationName = destinationName;
 
 	emit navigationStateChanged();

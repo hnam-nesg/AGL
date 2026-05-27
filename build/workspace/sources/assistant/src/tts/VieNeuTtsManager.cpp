@@ -60,6 +60,55 @@ bool isSoftBoundary(char c)
     return c == ',' || c == ';' || c == ':';
 }
 
+bool isClosingPunctuation(char c)
+{
+    return c == '"' || c == '\'' || c == ')' || c == ']';
+}
+
+bool isBoundaryFollowedBySpaceOrEnd(const std::string& text, size_t index)
+{
+    size_t next = index + 1;
+    while (next < text.size() && isClosingPunctuation(text[next])) {
+        ++next;
+    }
+    return next >= text.size() ||
+           std::isspace(static_cast<unsigned char>(text[next])) != 0;
+}
+
+size_t naturalBoundaryEnd(const std::string& text, size_t index)
+{
+    size_t end = index + 1;
+    while (end < text.size()) {
+        const char c = text[end];
+        if (isSentenceBoundary(c) || isClosingPunctuation(c)) {
+            ++end;
+            continue;
+        }
+        break;
+    }
+    return end;
+}
+
+bool naturalBoundaryAt(const std::string& text, size_t index, bool* hard)
+{
+    const char c = text[index];
+    if (c == '\n') {
+        if (hard) *hard = true;
+        return true;
+    }
+
+    if (!isSentenceBoundary(c) && !isSoftBoundary(c)) {
+        return false;
+    }
+
+    if (!isBoundaryFollowedBySpaceOrEnd(text, index)) {
+        return false;
+    }
+
+    if (hard) *hard = isSentenceBoundary(c);
+    return true;
+}
+
 size_t findSplitBefore(const std::string& text, size_t limit, size_t minPos)
 {
     const size_t capped = std::min(limit, text.size());
@@ -92,20 +141,97 @@ size_t findSplitBefore(const std::string& text, size_t limit, size_t minPos)
     return capped;
 }
 
-size_t findNextBoundary(const std::string& text, size_t begin, size_t limit)
+size_t findNaturalSplit(const std::string& text,
+                        size_t pos,
+                        size_t naturalMinChars,
+                        size_t targetChars,
+                        size_t maxChars)
 {
-    const size_t capped = std::min(limit, text.size());
-    for (size_t i = begin; i < capped; ++i) {
-        if (isSentenceBoundary(text[i]) || isSoftBoundary(text[i])) {
-            return i + 1;
+    const size_t remaining = text.size() - pos;
+    const size_t maxEnd = std::min(text.size(), pos + maxChars);
+    const bool tailFits = remaining <= maxChars;
+    size_t softCandidate = std::string::npos;
+
+    for (size_t i = pos; i < maxEnd; ++i) {
+        bool hard = false;
+        if (!naturalBoundaryAt(text, i, &hard)) {
+            continue;
+        }
+
+        const size_t end = std::min(naturalBoundaryEnd(text, i), maxEnd);
+        const std::string candidate = trimChunk(text.substr(pos, end - pos));
+        if (candidate.empty()) {
+            continue;
+        }
+
+        const size_t len = candidate.size();
+        const size_t restLen = trimChunk(text.substr(end)).size();
+
+        if (hard) {
+            if (len >= 8 || restLen == 0) {
+                return end;
+            }
+            continue;
+        }
+
+        if (len >= naturalMinChars && restLen >= 8) {
+            if (softCandidate == std::string::npos) {
+                softCandidate = end;
+            }
+            if (len >= std::max<size_t>(naturalMinChars, targetChars / 2)) {
+                return end;
+            }
         }
     }
-    for (size_t i = begin; i < capped; ++i) {
-        if (std::isspace(static_cast<unsigned char>(text[i]))) {
-            return i + 1;
+
+    if (softCandidate != std::string::npos && tailFits) {
+        return softCandidate;
+    }
+
+    if (tailFits) {
+        return text.size();
+    }
+
+    if (softCandidate != std::string::npos) {
+        return softCandidate;
+    }
+
+    size_t split = findSplitBefore(text.substr(pos, maxChars),
+                                   targetChars,
+                                   naturalMinChars);
+    if (split == std::string::npos || split == 0) {
+        split = std::min(maxChars, remaining);
+    }
+    return pos + split;
+}
+
+char lastNonSpaceChar(const std::string& text)
+{
+    for (size_t i = text.size(); i > 0; --i) {
+        const char c = text[i - 1];
+        if (std::isspace(static_cast<unsigned char>(c)) == 0) {
+            return c;
         }
     }
-    return std::string::npos;
+    return '\0';
+}
+
+int pauseMsAfterText(const std::string& text)
+{
+    switch (lastNonSpaceChar(text)) {
+    case '?':
+    case '!':
+        return 460;
+    case '.':
+        return 380;
+    case ';':
+    case ':':
+        return 300;
+    case ',':
+        return 190;
+    default:
+        return 120;
+    }
 }
 
 uint64_t fnv1a64(const std::string& text)
@@ -197,6 +323,7 @@ void VieNeuTtsManager::setRuntimeOptions(float playbackSpeed,
 
 void VieNeuTtsManager::stop()
 {
+    const bool wasSpeaking = isSpeaking();
     stop_requested_.store(true);
     engine_.stop();
     worker_.stop();
@@ -205,7 +332,7 @@ void VieNeuTtsManager::stop()
         audioLevelCallback_(0.0);
     }
 
-    if (playbackStateCallback_) {
+    if (wasSpeaking && playbackStateCallback_) {
         playbackStateCallback_(false);
     }
 }
@@ -229,6 +356,10 @@ std::vector<std::string> VieNeuTtsManager::splitTextForSynthesis(const std::stri
         targetChars = std::max<size_t>(80, maxChars * 2 / 3);
     }
 
+    const size_t naturalMinChars = std::min(
+        minChars,
+        std::max<size_t>(16, minChars / 2));
+
     std::vector<std::string> chunks;
     chunks.reserve(std::max<size_t>(1, text.size() / std::max<size_t>(1, targetChars) + 1));
 
@@ -241,21 +372,12 @@ std::vector<std::string> VieNeuTtsManager::splitTextForSynthesis(const std::stri
             break;
         }
 
-        const size_t remaining = text.size() - pos;
-        if (remaining <= maxChars) {
-            std::string tail = trimChunk(text.substr(pos));
-            if (!tail.empty()) {
-                chunks.push_back(std::move(tail));
-            }
-            break;
-        }
-
-        size_t split = findSplitBefore(text.substr(pos, maxChars), targetChars, minChars);
-        if (split == std::string::npos || split < minChars) {
-            const size_t next = findNextBoundary(text, pos + minChars, pos + maxChars);
-            split = next == std::string::npos ? maxChars : next - pos;
-        }
-        split = std::clamp(split, minChars, maxChars);
+        const size_t splitEnd = findNaturalSplit(text,
+                                                 pos,
+                                                 naturalMinChars,
+                                                 targetChars,
+                                                 maxChars);
+        const size_t split = std::max<size_t>(1, splitEnd - pos);
 
         std::string chunk = trimChunk(text.substr(pos, split));
         if (!chunk.empty()) {
@@ -266,7 +388,7 @@ std::vector<std::string> VieNeuTtsManager::splitTextForSynthesis(const std::stri
 
     if (chunks.size() > 1) {
         for (size_t i = 0; i < chunks.size();) {
-            if (chunks[i].size() >= minChars) {
+            if (chunks[i].size() >= naturalMinChars) {
                 ++i;
                 continue;
             }
@@ -334,6 +456,8 @@ std::vector<std::string> VieNeuTtsManager::splitTextForSynthesis(const std::stri
 
     std::cout << "[VieNeuTTS] chunk plan min="
               << minChars
+              << " natural_min="
+              << naturalMinChars
               << " target="
               << targetChars
               << " max="
@@ -665,7 +789,8 @@ bool VieNeuTtsManager::speak(const std::string& text)
             return false;
         }
 
-        const size_t joinSilenceSamples = msToSamples(80, combinedSampleRate);
+        const int pauseMs = i > 0 ? pauseMsAfterText(chunks[i - 1]) : 0;
+        const size_t joinSilenceSamples = msToSamples(pauseMs, combinedSampleRate);
         if (!combinedPcm.empty() && joinSilenceSamples > 0) {
             combinedPcm.insert(combinedPcm.end(), joinSilenceSamples, 0);
         }

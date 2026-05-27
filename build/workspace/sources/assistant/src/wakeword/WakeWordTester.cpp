@@ -19,7 +19,6 @@ WakeWordTest::WakeWordTest(const Config& cfg)
           cfg.debug
       }),
       engine_(cfg.mel_model_path, cfg.embed_model_path, cfg.wakeword_model_path),
-      bargeInVad_(cfg.command_asr_cfg.segmenter_cfg.silero_vad_cfg),
       commandAsr_(cfg.command_asr_cfg)
 {
 }
@@ -93,25 +92,12 @@ bool WakeWordTest::initialize()
 
     std::cout << "[WakeWordTest] Initialized successfully\n";
 
-    if (cfg_.command_asr_cfg.segmenter_cfg.enable_silero_vad) {
-        std::string vadError;
-        if (!bargeInVad_.initialize(&vadError)) {
-            std::cerr << "[WakeWordTest] Failed to initialize barge-in VAD: "
-                    << vadError << "\n";
-            return false;
-        }
-        bargeInTriggerWindows_ =
-            std::max(2, cfg_.command_asr_cfg.segmenter_cfg.silero_vad_cfg.start_trigger_chunks);
-    }
-
     return true;
 }
 
 bool WakeWordTest::start()
 {
     stop();
-
-    resetBargeInDetector();
 
     wakeword_step_index_ = 0;
     wakeword_log_counter_ = 0;
@@ -154,7 +140,7 @@ void WakeWordTest::onAudioChunk(const std::vector<int16_t>& chunk)
         break;
 
     case State::SpeakingReply:
-        processSpeakingChunk(chunk);
+        // TTS đang phát: bỏ qua mic input để không tự cắt câu trả lời hoặc tạo command rỗng.
         break;
     }
 }
@@ -214,8 +200,6 @@ void WakeWordTest::processCommandChunk(const std::vector<int16_t>& chunk)
 
         // CHANGED: sau khi đã có command thì chuyển sang trạng thái assistant busy
         state_ = State::SpeakingReply;
-        resetBargeInDetector();
-
         commandAsr_.handleFinalCommandText(finalText);
     } else {
         std::cout << "[Command] No usable command detected\n";
@@ -230,97 +214,6 @@ void WakeWordTest::processCommandChunk(const std::vector<int16_t>& chunk)
         state_ = State::WaitingWakeword;
         clearInteractionUiOnGuiThread();
     }
-}
-
-void WakeWordTest::processSpeakingChunk(const std::vector<int16_t>& chunk)
-{
-    // CHANGED: không chạy wakeword nữa. Chỉ nghe xem user có bắt đầu nói hay không.
-    if (!detectBargeInSpeech(chunk)) {
-        return;
-    }
-
-    std::cout << "[BargeIn] User speech detected -> interrupt current reply\n";
-
-    commandAsr_.interruptAllAndPrepareForNewCommand();
-
-    engine_.reset();
-    wakeword_step_index_ = 0;
-    state_ = State::RecordingCommand;
-    resetBargeInDetector();
-    commandAsr_.reset();
-}
-
-void WakeWordTest::resetBargeInDetector()
-{
-    bargeInBuffer_.clear();
-    bargeInSpeechRun_ = 0;
-
-    if (cfg_.command_asr_cfg.segmenter_cfg.enable_silero_vad) {
-        bargeInVad_.reset();
-
-        const int windowSize = std::max(1, bargeInVad_.windowSizeSamples());
-        const int sampleRate = std::max(1, bargeInVad_.sampleRate());
-
-        // CHANGED: bỏ qua khoảng ~250 ms đầu để tránh tự cắt vì tiếng mở đầu TTS
-        const int ignoreSamples = sampleRate / 4;
-        bargeInIgnoreWindows_ = std::max(0, ignoreSamples / windowSize);
-    } else {
-        bargeInIgnoreWindows_ = 0;
-    }
-}
-
-bool WakeWordTest::detectBargeInSpeech(const std::vector<int16_t>& chunk)
-{
-    if (!cfg_.command_asr_cfg.segmenter_cfg.enable_silero_vad || !bargeInVad_.isInitialized()) {
-        return false;
-    }
-
-    const int window = std::max(1, bargeInVad_.windowSizeSamples());
-
-    bargeInBuffer_.insert(bargeInBuffer_.end(), chunk.begin(), chunk.end());
-
-    bool triggered = false;
-
-    while (static_cast<int>(bargeInBuffer_.size()) >= window) {
-        std::vector<int16_t> oneWindow(
-            bargeInBuffer_.begin(),
-            bargeInBuffer_.begin() + window
-        );
-        bargeInBuffer_.erase(bargeInBuffer_.begin(), bargeInBuffer_.begin() + window);
-
-        const auto vad = bargeInVad_.processPcm16(oneWindow);
-        if (!vad.ok) {
-            continue;
-        }
-
-        if (bargeInIgnoreWindows_ > 0) {
-            --bargeInIgnoreWindows_;
-            continue;
-        }
-
-        const double rms = calcRms(oneWindow);
-
-        // CHANGED: kết hợp VAD + RMS để bớt tự ăn tiếng loa
-        if (vad.is_speech && rms > 300.0) {
-            ++bargeInSpeechRun_;
-        } else {
-            bargeInSpeechRun_ = 0;
-        }
-
-        if (cfg_.debug) {
-            std::cout << "[BargeIn] prob=" << vad.speech_prob
-                      << " rms=" << rms
-                      << " run=" << bargeInSpeechRun_
-                      << "\n";
-        }
-
-        if (bargeInSpeechRun_ >= bargeInTriggerWindows_) {
-            triggered = true;
-            break;
-        }
-    }
-
-    return triggered;
 }
 
 double WakeWordTest::calcRms(const std::vector<int16_t>& chunk)

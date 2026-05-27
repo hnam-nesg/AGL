@@ -18,7 +18,6 @@
 #include <QSGRendererInterface>
 #include <QTimer>
 #include <QScreen>
-#include <QtWebEngineQuick>
 #include <QtCore/QProcessEnvironment>
 
 #include <weather.h>
@@ -44,10 +43,14 @@
 #include <QSystemSemaphore>
 #include "shared_protocol.h"
 #include "SharedImageProvider.h"
+#include "shimmerlogoitem.h"
+#include "ThemeSettingsManager.h"
 
 #include <mediaplayer.h>
 #include <hvac.h>
 #include <vehiclesignals.h>
+
+#include <memory>
 
 #ifndef MIN
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
@@ -367,7 +370,7 @@ create_component(QPlatformNativeInterface *native, QQmlComponent *comp,
 }
 
 
-static void
+static QObject *
 load_agl_shell(QPlatformNativeInterface *native, QQmlApplicationEngine *engine,
 	       struct agl_shell *agl_shell, QScreen *screen)
 {
@@ -411,9 +414,11 @@ load_agl_shell(QPlatformNativeInterface *native, QQmlApplicationEngine *engine,
 	agl_shell_set_activate_region(agl_shell, output,
 				      x, y, width, height);
 #endif
+
+	return qobj_bg;
 }
 
-static void
+static QObject *
 load_agl_shell_for_ci(QPlatformNativeInterface *native,
 		      QQmlApplicationEngine *engine,
 		      struct agl_shell *agl_shell, QScreen *screen)
@@ -446,6 +451,8 @@ load_agl_shell_for_ci(QPlatformNativeInterface *native,
 	agl_shell_set_panel(agl_shell, bottom, output, AGL_SHELL_EDGE_BOTTOM);
 
 	qDebug() << "CI mode - with multiple surfaces";
+
+	return qobj_bg;
 }
 
 static void
@@ -457,12 +464,12 @@ run_in_thread(GrpcClient *client)
 	grpc::Status status = client->Wait();
 }
 
-static void
+static QObject *
 load_agl_shell_app(QPlatformNativeInterface *native, QQmlApplicationEngine *engine,
 		   struct shell_data shell_data, const char *screen_name, bool is_demo)
 {
 	QScreen *screen = nullptr;
-	HomescreenHandler *homescreenHandler = shell_data.homescreenHandler;
+	QObject *homescreenRoot = nullptr;
 
 	if (!screen_name)
 		screen = qApp->primaryScreen();
@@ -471,24 +478,26 @@ load_agl_shell_app(QPlatformNativeInterface *native, QQmlApplicationEngine *engi
 
 	if (!screen) {
 		qDebug() << "No outputs present in the system.";
-		return;
+		return nullptr;
 	}
 
 	if (is_demo) {
-		load_agl_shell_for_ci(native, engine, shell_data.shell, screen);
+		homescreenRoot = load_agl_shell_for_ci(native, engine, shell_data.shell, screen);
 	} else {
-		load_agl_shell(native, engine, shell_data.shell, screen);
+		homescreenRoot = load_agl_shell(native, engine, shell_data.shell, screen);
 	}
 
 	/* Delay the ready signal until after Qt has done all of its own setup
 	 * in a.exec() */
-	QTimer::singleShot(500, [native, shell_data](){
+	QTimer::singleShot(50, [native, shell_data](){
 		qDebug() << "sending ready to compositor";
 		agl_shell_ready(shell_data.shell);
 		wl_display_flush(getWlDisplay(native));
 		homescreen_shell_ready = true;
 		notify_systemd_if_homescreen_visible();
 	});
+
+	return homescreenRoot;
 }
 
 static void
@@ -646,10 +655,10 @@ int main(int argc, char *argv[])
 	QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
 	QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 	QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-	QtWebEngineQuick::initialize();
 
 	QGuiApplication app(argc, argv);
 	QQmlApplicationEngine engine;
+	qmlRegisterType<ShimmerLogoItem>("HomescreenSplash", 1, 0, "ShimmerLogo");
 	// engine.addImageProvider("shared", new SharedImageProvider(SHARED_KEY));
 	const char *screen_name;
 	bool is_demo_val = false;
@@ -676,10 +685,6 @@ int main(int argc, char *argv[])
 	// we need to have an app_id
 	app.setDesktopFileName("homescreen");
 
-	GrpcClient *client = new GrpcClient();
-	// create a new thread to listner for gRPC events
-	std::thread th = std::thread(run_in_thread, client);
-
 	register_agl_shell(native, &shell_data);
 	if (!shell_data.shell) {
 		fprintf(stderr, "agl_shell extension is not advertised. "
@@ -705,52 +710,84 @@ int main(int argc, char *argv[])
 
 	std::shared_ptr<struct agl_shell> agl_shell{shell_data.shell, agl_shell_destroy};
 
-	// Import C++ class to QML
-	ApplicationLauncher *launcher = new ApplicationLauncher();
-	launcher->setCurrent(QStringLiteral("launcher"));
+	QObject *homescreenRoot = load_agl_shell_app(native, &engine, shell_data,
+						     screen_name, is_demo_val);
 
-	HomescreenHandler* homescreenHandler = new HomescreenHandler(launcher);
-	shell_data.homescreenHandler = homescreenHandler;
-	shell_data.homescreenHandler->setGrpcClient(client);
+	auto contextSetupStarted = std::make_shared<bool>(false);
+	auto setupShellContext = [contextSetupStarted, &app, &engine, &shell_data, homescreenRoot]() {
+		if (*contextSetupStarted)
+			return;
+		*contextSetupStarted = true;
 
-	QTimer::singleShot(1000, [client, homescreenHandler]() {
-		HMI_DEBUG("HomescreenHandler", "Checking if connected to the gRPC server...");
-		client->WaitForConnected(500, 10);
-		client->AppStatusState(app_status_callback, homescreenHandler);
-	});
+		QQmlContext *context = engine.rootContext();
+		const QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
 
-	QQmlContext *context = engine.rootContext();
-	const QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+		GrpcClient *client = new GrpcClient();
+		std::thread(run_in_thread, client).detach();
 
-	HandlerModel3D model3d;
+		ApplicationLauncher *launcher = new ApplicationLauncher(&app);
+		launcher->setCurrent(QStringLiteral("launcher"));
 
-	const QString assetDir = QCoreApplication::applicationDirPath() + "/images/";
-    const QString assetBaseUrl = QUrl::fromLocalFile(assetDir).toString(); // "file:///.../assets/"
+		HomescreenHandler* homescreenHandler = new HomescreenHandler(launcher, client, &app);
+		shell_data.homescreenHandler = homescreenHandler;
+		shell_data.homescreenHandler->setGrpcClient(client);
 
-	context->setContextProperty("mediaplayer", new Mediaplayer(context));
-    VehicleSignalsConfig vsConfig("mediaplayer");
+		HandlerModel3D *model3d = new HandlerModel3D(&app);
+		ThemeSettingsManager *themeSettings = new ThemeSettingsManager(&app);
 
-	VehicleSignalsConfig vsConfig_hvac("homescreen");
-	VehicleSignalsConfig vsConfig_read("homescreen");
-    context->setContextProperty("VehicleSignals", new VehicleSignals(vsConfig_read));
-	context->setContextProperty("hvac", new HVAC(new VehicleSignals(vsConfig_hvac)));
+		const QString assetDir = QCoreApplication::applicationDirPath() + "/images/";
+		const QString assetBaseUrl = QUrl::fromLocalFile(assetDir).toString();
 
-	context->setContextProperty("ASSET_BASE", assetBaseUrl);
-	context->setContextProperty("homescreenHandler", homescreenHandler);
-	context->setContextProperty("launcher", launcher);
-	context->setContextProperty(
-		QStringLiteral("GoongMapTilesKey"),
-		env.value(QStringLiteral("GOONG_MAPTILES_KEY")));
-	context->setContextProperty(
-		QStringLiteral("GoongStyleUrl"),
-		env.value(QStringLiteral("GOONG_STYLE_URL"),
-			  QStringLiteral("https://tiles.goong.io/assets/goong_map_web.json")));
-	context->setContextProperty("weather", new Weather());
-	context->setContextProperty("bluetooth", new Bluetooth(false, context));
-	context->setContextProperty("Handler3D", &model3d);
+		context->setContextProperty("mediaplayer", new Mediaplayer(context, &app));
 
-	load_agl_shell_app(native, &engine, shell_data,
-			   screen_name, is_demo_val);
+		VehicleSignalsConfig vsConfig_hvac("homescreen");
+		VehicleSignalsConfig vsConfig_read("homescreen");
+		VehicleSignals *vehicleSignals = new VehicleSignals(vsConfig_read, &app);
+		VehicleSignals *hvacSignals = new VehicleSignals(vsConfig_hvac, &app);
+		context->setContextProperty("VehicleSignals", vehicleSignals);
+		context->setContextProperty("hvac", new HVAC(hvacSignals, &app));
+
+		context->setContextProperty("ASSET_BASE", assetBaseUrl);
+		context->setContextProperty("homescreenHandler", homescreenHandler);
+		context->setContextProperty("launcher", launcher);
+		context->setContextProperty(
+			QStringLiteral("GoongMapTilesKey"),
+			env.value(QStringLiteral("GOONG_MAPTILES_KEY")));
+		context->setContextProperty(
+			QStringLiteral("GoongStyleUrl"),
+			env.value(QStringLiteral("GOONG_STYLE_URL"),
+				  QStringLiteral("https://tiles.goong.io/assets/goong_map_web.json")));
+		context->setContextProperty("weather", new Weather(&app));
+		context->setContextProperty("bluetooth", new Bluetooth(false, context, false, &app));
+		context->setContextProperty("Handler3D", model3d);
+		context->setContextProperty("themeSettings", themeSettings);
+
+		if (homescreenRoot)
+			homescreenRoot->setProperty("shellContextReady", true);
+
+		QTimer::singleShot(1000, &app, [client, homescreenHandler]() {
+			HMI_DEBUG("HomescreenHandler", "Checking if connected to the gRPC server...");
+			client->WaitForConnected(500, 10);
+			client->AppStatusState(app_status_callback, homescreenHandler);
+		});
+	};
+
+	if (homescreenRoot) {
+		QTimer *splashWatcher = new QTimer(&app);
+		splashWatcher->setInterval(25);
+		QObject::connect(splashWatcher, &QTimer::timeout,
+				 &app, [homescreenRoot, setupShellContext, splashWatcher]() {
+			if (!homescreenRoot->property("splashEffectDone").toBool())
+				return;
+
+			splashWatcher->stop();
+			splashWatcher->deleteLater();
+			setupShellContext();
+		});
+		splashWatcher->start();
+	} else {
+		QTimer::singleShot(250, &app, setupShellContext);
+	}
 
 	return app.exec();
 }

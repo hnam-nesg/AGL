@@ -7,8 +7,8 @@ Item {
     //anchors.centerIn: parent
     property real radius: 10
     property real borderWidth: 1
-    property color c1: "#3f6f6f6f"
-    property color c2: "#3f6f6f6f"//"#202a36"
+    property color c1: themeSettings.panelColor
+    property color c2: themeSettings.panelColor // themeSettings.highlightColor
 
     Canvas {
         id: borderCanvas

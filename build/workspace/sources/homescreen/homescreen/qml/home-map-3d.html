@@ -77,8 +77,8 @@
             box-shadow:
                 0 10px 22px rgba(0, 0, 0, 0.62),
                 0 16px 28px rgba(0, 0, 0, 0.38),
-                0 0 34px rgba(185, 28, 28, 0.92),
-                0 0 72px rgba(127, 16, 24, 0.72);
+                0 0 34px rgba(37, 99, 235, 0.92),
+                0 0 72px rgba(29, 78, 216, 0.72);
         }
 
         .home-marker-ripple {
@@ -90,10 +90,10 @@
             border-radius: 50%;
             background:
                 radial-gradient(circle,
-                    rgba(255, 196, 196, 0.58) 0%,
-                    rgba(220, 38, 38, 0.44) 24%,
-                    rgba(127, 16, 24, 0.30) 52%,
-                    rgba(127, 16, 24, 0.00) 82%);
+                    rgba(191, 219, 254, 0.58) 0%,
+                    rgba(59, 130, 246, 0.44) 24%,
+                    rgba(29, 78, 216, 0.30) 52%,
+                    rgba(29, 78, 216, 0.00) 82%);
             transform: translate(-50%, -50%) scale(0.10);
             animation: homeRouteAlarmPulse 1.65s ease-out infinite;
             pointer-events: none;
@@ -106,10 +106,10 @@
             animation-delay: 0.42s;
             background:
                 radial-gradient(circle,
-                    rgba(248, 113, 113, 0.48) 0%,
-                    rgba(185, 28, 28, 0.32) 30%,
-                    rgba(127, 16, 24, 0.18) 58%,
-                    rgba(127, 16, 24, 0.00) 86%);
+                    rgba(147, 197, 253, 0.48) 0%,
+                    rgba(37, 99, 235, 0.32) 30%,
+                    rgba(29, 78, 216, 0.18) 58%,
+                    rgba(29, 78, 216, 0.00) 86%);
         }
 
         .home-marker-ripple.ripple-3 {
@@ -118,10 +118,10 @@
             animation-delay: 0.84s;
             background:
                 radial-gradient(circle,
-                    rgba(220, 38, 38, 0.34) 0%,
-                    rgba(127, 16, 24, 0.24) 38%,
-                    rgba(127, 16, 24, 0.10) 68%,
-                    rgba(127, 16, 24, 0.00) 90%);
+                    rgba(59, 130, 246, 0.34) 0%,
+                    rgba(29, 78, 216, 0.24) 38%,
+                    rgba(29, 78, 216, 0.10) 68%,
+                    rgba(29, 78, 216, 0.00) 90%);
         }
 
         .home-marker-core {
@@ -129,15 +129,15 @@
             height: 100%;
             border-radius: inherit;
             background:
-                radial-gradient(circle at 34% 24%, rgba(255, 214, 214, 0.96) 0%, rgba(255, 160, 160, 0.72) 12%, rgba(255, 160, 160, 0.0) 27%),
-                radial-gradient(circle at 62% 70%, #4f0309 0%, #6f0710 36%, #99121e 64%, #c61f2e 100%);
+                radial-gradient(circle at 34% 24%, rgba(219, 234, 254, 0.96) 0%, rgba(147, 197, 253, 0.72) 12%, rgba(147, 197, 253, 0.0) 27%),
+                radial-gradient(circle at 62% 70%, #0b1f5d 0%, #123a8c 36%, #1d4ed8 64%, #3b82f6 100%);
             position: relative;
             z-index: 1;
             box-shadow:
-                inset -7px -9px 12px rgba(40, 0, 4, 0.72),
-                inset 5px 4px 8px rgba(255, 205, 205, 0.30),
+                inset -7px -9px 12px rgba(4, 18, 55, 0.72),
+                inset 5px 4px 8px rgba(191, 219, 254, 0.30),
                 0 5px 10px rgba(0, 0, 0, 0.46),
-                0 0 26px rgba(220, 38, 38, 0.86);
+                0 0 26px rgba(37, 99, 235, 0.86);
             animation: homeRouteCoreBeat 1.95s ease-in-out infinite;
         }
 
@@ -155,18 +155,14 @@
     <script src="qrc:/maplibre-gl.js"></script>
 
     <script>
-        console.log("HOME_MAP_3D_VERSION_2026_05_12_DARK_GOONG");
+        console.log("HOME_MAP_3D_VERSION_2026_05_26_DARK_GOONG_BLUE_MARKER");
 
         const DEFAULT_CENTER = [106.70290, 10.80690];
         const DEFAULT_GOONG_STYLE_URL = "https://tiles.goong.io/assets/goong_map_web.json";
         const DEFAULT_GOONG_BUILDING_LAYER = "VN_Building";
         const EMPTY_ROUTE = {
-            type: "Feature",
-            geometry: {
-                type: "LineString",
-                coordinates: []
-            },
-            properties: {}
+            type: "FeatureCollection",
+            features: []
         };
 
         const BLANK_DARK_STYLE = {
@@ -200,6 +196,34 @@
         let currentMarker = null;
         let destinationMarker = null;
         let lastPayload = null;
+        let routeProgressLogTimer = null;
+        let pendingRouteProgressPayload = null;
+        let driveAnimationFrame = 0;
+        let driveAnimationActive = false;
+        let driveLastFrameTime = 0;
+        let driveRouteKey = "";
+        let driveRouteMeasure = null;
+        let driveProgressMeters = 0;
+        let drivePayload = null;
+        let driveSpeedKph = 0;
+        let driveStoppedSpeedThresholdKph = 0.5;
+        let driveCameraBearing = NaN;
+        let mirrorLastCameraTime = 0;
+        let mirrorAnimationFrame = 0;
+        let mirrorLastFrameTime = 0;
+        let mirrorTargetProgressMeters = 0;
+        let mirrorPayload = null;
+        let mirrorFallbackZoom = undefined;
+        let mirrorFallbackPitch = undefined;
+        let drivePausedBySpeed = true;
+        let activeNavigationSessionId = -1;
+        let clearedNavigationSessionId = -1;
+        let appliedRouteKey = "";
+        let driveVisualProgressMeters = 0;
+        let driveFilteredSpeedMps = 0;
+        let lastRouteVisualUpdateMs = 0;
+        let lastProgressPublishMs = 0;
+        let suppressCameraLogUntil = 0;
         let providerStyleApplied = false;
         let map3dActive = true;
         let refreshTimer = null;
@@ -213,8 +237,13 @@
         let providerStyleLoadToken = 0;
 
         const ROUTE_SOURCE_ID = "home-navigation-route";
+        const REMAINING_ROUTE_SOURCE_ID = "home-navigation-route-remaining";
+        const ROUTE_BASE_LAYER_ID = "home-navigation-route-base";
         const ROUTE_CASING_LAYER_ID = "home-navigation-route-casing";
         const ROUTE_LINE_LAYER_ID = "home-navigation-route-line";
+        const VEHICLE_MARKER_SOURCE_ID = "home-navigation-vehicle-source";
+        const VEHICLE_MARKER_GLOW_LAYER_ID = "home-navigation-vehicle-glow";
+        const VEHICLE_MARKER_LAYER_ID = "home-navigation-vehicle";
         const SUPPLEMENTAL_SOURCE_ID = "home-rendered-footprint-source";
         const SUPPLEMENTAL_LAYER_ID = "home-rendered-footprint-3d";
         const LANDMARK_SOURCE_ID = "home-landmark81-source";
@@ -311,10 +340,14 @@
                     setStylePaint(layer, "fill-color", DARK_MAP_PALETTE.water);
                 else if (isGreenLayer(layer))
                     setStylePaint(layer, "fill-color", DARK_MAP_PALETTE.green);
-                else if (isBuildingLayer(layer))
+                else if (isBuildingLayer(layer)) {
                     setStylePaint(layer, "fill-color", DARK_MAP_PALETTE.buildingBase);
-                else
+                    setStylePaint(layer, "fill-opacity", 0.20);
+                    setStylePaint(layer, "fill-outline-color", "#2e526b");
+                    return;
+                } else {
                     setStylePaint(layer, "fill-color", DARK_MAP_PALETTE.land);
+                }
 
                 setStylePaint(layer, "fill-opacity", 0.96);
                 setStylePaint(layer, "fill-outline-color", DARK_MAP_PALETTE.boundary);
@@ -481,7 +514,13 @@
                     return;
 
                 console.warn("HOME_MAP_STYLE_DARK_FETCH_FAILED", safeStringifyError(err));
-                map.setStyle(requestUrl);
+                rebuildStyleLayers();
+                scheduleProviderStyleRetry("provider-style-fetch");
+                if (lastPayload) {
+                    window.setTimeout(function () {
+                        applyPayload(lastPayload);
+                    }, 0);
+                }
             });
         }
 
@@ -514,9 +553,19 @@
             interactive: false
         });
 
+        function suppressCameraLogs(ms) {
+            suppressCameraLogUntil = Math.max(suppressCameraLogUntil, Date.now() + Math.max(0, ms || 0));
+        }
+
         function sendCameraToQml() {
+            if (Date.now() < suppressCameraLogUntil)
+                return;
+
             window.clearTimeout(cameraLogTimer);
             cameraLogTimer = window.setTimeout(function () {
+                if (Date.now() < suppressCameraLogUntil)
+                    return;
+
                 const center = map.getCenter();
                 console.log("HOME_MAP_CAMERA=" + JSON.stringify({
                     lat: center.lat,
@@ -528,11 +577,35 @@
             }, 50);
         }
 
+        function sendRouteProgressToQml(progress, immediate) {
+            if (immediate) {
+                window.clearTimeout(routeProgressLogTimer);
+                routeProgressLogTimer = null;
+                pendingRouteProgressPayload = null;
+                console.log("HOME_MAP_ROUTE_PROGRESS=" + JSON.stringify(progress));
+                return;
+            }
+
+            pendingRouteProgressPayload = progress;
+            if (routeProgressLogTimer)
+                return;
+
+            routeProgressLogTimer = window.setTimeout(function () {
+                routeProgressLogTimer = null;
+                if (!pendingRouteProgressPayload)
+                    return;
+
+                console.log("HOME_MAP_ROUTE_PROGRESS=" + JSON.stringify(pendingRouteProgressPayload));
+                pendingRouteProgressPayload = null;
+            }, 160);
+        }
+
         map.on("moveend", sendCameraToQml);
         map.on("zoomend", sendCameraToQml);
         map.on("rotateend", sendCameraToQml);
         map.on("pitchend", sendCameraToQml);
         map.on("idle", scheduleSupplementalRefresh);
+        map.on("move", scheduleSupplementalRefresh);
         map.on("moveend", scheduleSupplementalRefresh);
         map.on("zoomend", scheduleSupplementalRefresh);
 
@@ -604,10 +677,14 @@
                     trySetPaint(layer.id, "fill-color", DARK_MAP_PALETTE.water);
                 else if (isGreenLayer(layer))
                     trySetPaint(layer.id, "fill-color", DARK_MAP_PALETTE.green);
-                else if (isBuildingLayer(layer))
+                else if (isBuildingLayer(layer)) {
                     trySetPaint(layer.id, "fill-color", DARK_MAP_PALETTE.buildingBase);
-                else
+                    trySetPaint(layer.id, "fill-opacity", map3dActive ? 0.20 : 0.72);
+                    trySetPaint(layer.id, "fill-outline-color", "#2e526b");
+                    return;
+                } else {
                     trySetPaint(layer.id, "fill-color", DARK_MAP_PALETTE.land);
+                }
 
                 trySetPaint(layer.id, "fill-opacity", 0.94);
                 trySetPaint(layer.id, "fill-outline-color", DARK_MAP_PALETTE.boundary);
@@ -705,7 +782,7 @@
         }
 
         function extrusionPaint(opacity) {
-            const h = heightExpression(22);
+            const h = heightExpression(52);
             return {
                 "fill-extrusion-color": [
                     "interpolate", ["linear"], h,
@@ -798,7 +875,7 @@
                         type: "fill-extrusion",
                         source: candidate.source,
                         "source-layer": candidate.sourceLayer,
-                        minzoom: 13,
+                        minzoom: 12,
                         paint: extrusionPaint(0.94)
                     }, beforeId);
                     console.log("HOME_MAP_3D_BUILDING_LAYER=" + layerId);
@@ -832,7 +909,7 @@
                         id: SUPPLEMENTAL_LAYER_ID,
                         type: "fill-extrusion",
                         source: SUPPLEMENTAL_SOURCE_ID,
-                        minzoom: 13,
+                        minzoom: 12,
                         paint: extrusionPaint(0.90)
                     }, firstSymbolLayerId());
                 } catch (e) {
@@ -1050,8 +1127,13 @@
         }
 
         function scheduleSupplementalRefresh() {
-            window.clearTimeout(refreshTimer);
-            refreshTimer = window.setTimeout(refreshRenderedFootprints, 140);
+            if (refreshTimer)
+                return;
+
+            refreshTimer = window.setTimeout(function () {
+                refreshTimer = null;
+                refreshRenderedFootprints();
+            }, 180);
         }
 
         function refreshRenderedFootprints() {
@@ -1151,7 +1233,7 @@
                         id: LANDMARK_LAYER_ID,
                         type: "fill-extrusion",
                         source: LANDMARK_SOURCE_ID,
-                        minzoom: 13,
+                        minzoom: 12,
                         paint: extrusionPaint(0.96)
                     }, firstSymbolLayerId());
                 } catch (e) {
@@ -1162,7 +1244,7 @@
 
         function ensureRouteLayers() {
             if (!map.isStyleLoaded())
-                return;
+                return false;
 
             if (!map.getSource(ROUTE_SOURCE_ID)) {
                 map.addSource(ROUTE_SOURCE_ID, {
@@ -1171,11 +1253,42 @@
                 });
             }
 
+            if (!map.getSource(REMAINING_ROUTE_SOURCE_ID)) {
+                map.addSource(REMAINING_ROUTE_SOURCE_ID, {
+                    type: "geojson",
+                    data: EMPTY_ROUTE
+                });
+            }
+
+            if (!map.getSource(VEHICLE_MARKER_SOURCE_ID)) {
+                map.addSource(VEHICLE_MARKER_SOURCE_ID, {
+                    type: "geojson",
+                    data: EMPTY_ROUTE
+                });
+            }
+
+            if (!map.getLayer(ROUTE_BASE_LAYER_ID)) {
+                map.addLayer({
+                    id: ROUTE_BASE_LAYER_ID,
+                    type: "line",
+                    source: ROUTE_SOURCE_ID,
+                    layout: {
+                        "line-cap": "round",
+                        "line-join": "round"
+                    },
+                    paint: {
+                        "line-color": "#0f2032",
+                        "line-width": 16,
+                        "line-opacity": 0.46
+                    }
+                });
+            }
+
             if (!map.getLayer(ROUTE_CASING_LAYER_ID)) {
                 map.addLayer({
                     id: ROUTE_CASING_LAYER_ID,
                     type: "line",
-                    source: ROUTE_SOURCE_ID,
+                    source: REMAINING_ROUTE_SOURCE_ID,
                     layout: {
                         "line-cap": "round",
                         "line-join": "round"
@@ -1192,7 +1305,7 @@
                 map.addLayer({
                     id: ROUTE_LINE_LAYER_ID,
                     type: "line",
-                    source: ROUTE_SOURCE_ID,
+                    source: REMAINING_ROUTE_SOURCE_ID,
                     layout: {
                         "line-cap": "round",
                         "line-join": "round"
@@ -1204,6 +1317,59 @@
                     }
                 });
             }
+
+            if (!map.getLayer(VEHICLE_MARKER_GLOW_LAYER_ID)) {
+                map.addLayer({
+                    id: VEHICLE_MARKER_GLOW_LAYER_ID,
+                    type: "circle",
+                    source: VEHICLE_MARKER_SOURCE_ID,
+                    paint: {
+                        "circle-color": "#bfdbfe",
+                        "circle-radius": [
+                            "interpolate",
+                            ["linear"],
+                            ["zoom"],
+                            12, 8,
+                            16, 12,
+                            19, 18
+                        ],
+                        "circle-opacity": 0.28,
+                        "circle-stroke-color": "#ffffff",
+                        "circle-stroke-width": 1,
+                        "circle-stroke-opacity": 0.18
+                    }
+                });
+            }
+
+            if (!map.getLayer(VEHICLE_MARKER_LAYER_ID)) {
+                map.addLayer({
+                    id: VEHICLE_MARKER_LAYER_ID,
+                    type: "circle",
+                    source: VEHICLE_MARKER_SOURCE_ID,
+                    paint: {
+                        "circle-color": "#ffffff",
+                        "circle-radius": [
+                            "interpolate",
+                            ["linear"],
+                            ["zoom"],
+                            12, 4,
+                            16, 6,
+                            19, 9
+                        ],
+                        "circle-stroke-color": "#38bdf8",
+                        "circle-stroke-width": [
+                            "interpolate",
+                            ["linear"],
+                            ["zoom"],
+                            12, 2,
+                            19, 4
+                        ],
+                        "circle-stroke-opacity": 0.95
+                    }
+                });
+            }
+
+            return true;
         }
 
         function markerElement(color, arrow, markerKind) {
@@ -1260,20 +1426,904 @@
             return existing;
         }
 
-        function setRoute(route) {
-            ensureRouteLayers();
-            const source = map.getSource(ROUTE_SOURCE_ID);
-            if (!source)
+        function routeFeature(route) {
+            const coordinates = Array.isArray(route) ? route : [];
+            return coordinates.length > 1 ? {
+                type: "FeatureCollection",
+                features: [{
+                    type: "Feature",
+                    geometry: {
+                        type: "LineString",
+                        coordinates: coordinates
+                    },
+                    properties: {}
+                }]
+            } : EMPTY_ROUTE;
+        }
+
+        function markerFeature(point, bearing) {
+            if (!validRoutePoint(point))
+                return EMPTY_ROUTE;
+
+            return {
+                type: "FeatureCollection",
+                features: [{
+                    type: "Feature",
+                    geometry: {
+                        type: "Point",
+                        coordinates: point
+                    },
+                    properties: {
+                        bearing: Number.isFinite(bearing) ? bearing : 0
+                    }
+                }]
+            };
+        }
+
+        function validRoutePoint(point) {
+            return Array.isArray(point)
+                    && point.length >= 2
+                    && Number.isFinite(point[0])
+                    && Number.isFinite(point[1])
+                    && point[1] >= -90 && point[1] <= 90
+                    && point[0] >= -180 && point[0] <= 180;
+        }
+
+        function samePoint(a, b) {
+            return a && b
+                    && Math.abs(a[0] - b[0]) < 0.000001
+                    && Math.abs(a[1] - b[1]) < 0.000001;
+        }
+
+        function normalizedRoute(route) {
+            const line = [];
+            if (!Array.isArray(route))
+                return line;
+
+            for (let i = 0; i < route.length; ++i) {
+                const point = route[i];
+                if (!validRoutePoint(point))
+                    continue;
+                const normalized = [point[0], point[1]];
+                const previous = line.length ? line[line.length - 1] : null;
+                if (previous && samePoint(previous, normalized))
+                    continue;
+                line.push(normalized);
+            }
+
+            return line;
+        }
+
+        function setGeoJsonSourceData(sourceId, data) {
+            const source = map.getSource(sourceId);
+            if (source && source.setData)
+                source.setData(data);
+        }
+
+        function normalizedBearing(value) {
+            if (!Number.isFinite(value))
+                return 0;
+
+            const bearing = value % 360;
+            return bearing < 0 ? bearing + 360 : bearing;
+        }
+
+        function shortestBearingDelta(from, to) {
+            let delta = normalizedBearing(to) - normalizedBearing(from);
+            if (delta > 180)
+                delta -= 360;
+            else if (delta < -180)
+                delta += 360;
+            return delta;
+        }
+
+        function smoothingAlpha(deltaSeconds, responseSeconds) {
+            if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0)
+                return 1;
+
+            return Math.max(0, Math.min(1, 1 - Math.exp(-deltaSeconds / responseSeconds)));
+        }
+
+        function bearingBetween(from, to) {
+            if (!from || !to)
+                return NaN;
+
+            const toRad = function (x) { return x * Math.PI / 180.0; };
+            const toDeg = function (x) { return x * 180.0 / Math.PI; };
+            const lon1 = toRad(from[0]);
+            const lat1 = toRad(from[1]);
+            const lon2 = toRad(to[0]);
+            const lat2 = toRad(to[1]);
+            const dLon = lon2 - lon1;
+            const y = Math.sin(dLon) * Math.cos(lat2);
+            const x = Math.cos(lat1) * Math.sin(lat2)
+                    - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+            return normalizedBearing(toDeg(Math.atan2(y, x)));
+        }
+
+        function routePointDistanceMeters(a, b) {
+            if (!a || !b)
+                return 0;
+
+            const toRad = function (x) { return x * Math.PI / 180.0; };
+            const earthRadius = 6371000.0;
+            const lat1 = toRad(a[1]);
+            const lat2 = toRad(b[1]);
+            const dLat = toRad(b[1] - a[1]);
+            const dLon = toRad(b[0] - a[0]);
+            const s = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                    + Math.cos(lat1) * Math.cos(lat2)
+                    * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return earthRadius * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+        }
+
+        function routeIdentity(route) {
+            if (!Array.isArray(route) || !route.length)
+                return "";
+
+            const first = route[0];
+            const last = route[route.length - 1];
+            return route.length + ":"
+                    + first[0].toFixed(6) + "," + first[1].toFixed(6) + ":"
+                    + last[0].toFixed(6) + "," + last[1].toFixed(6);
+        }
+
+        function buildRouteMeasure(route) {
+            const segments = [];
+            let total = 0;
+
+            for (let i = 1; i < route.length; ++i) {
+                const from = route[i - 1];
+                const to = route[i];
+                const length = routePointDistanceMeters(from, to);
+                if (length <= 0.01)
+                    continue;
+
+                segments.push({
+                    from: from,
+                    to: to,
+                    start: total,
+                    end: total + length,
+                    length: length,
+                    bearing: bearingBetween(from, to)
+                });
+                total += length;
+            }
+
+            return {
+                segments: segments,
+                total: total
+            };
+        }
+
+        function pointAtRouteDistance(measure, distance) {
+            if (!measure || !measure.segments || !measure.segments.length)
+                return null;
+
+            const clamped = Math.max(0, Math.min(measure.total, distance));
+            for (let i = 0; i < measure.segments.length; ++i) {
+                const segment = measure.segments[i];
+                if (clamped > segment.end && i < measure.segments.length - 1)
+                    continue;
+
+                const local = segment.length > 0
+                        ? Math.max(0, Math.min(1, (clamped - segment.start) / segment.length))
+                        : 0;
+                return {
+                    point: [
+                        segment.from[0] + (segment.to[0] - segment.from[0]) * local,
+                        segment.from[1] + (segment.to[1] - segment.from[1]) * local
+                    ],
+                    bearing: segment.bearing
+                };
+            }
+
+            const last = measure.segments[measure.segments.length - 1];
+            return {
+                point: last.to,
+                bearing: last.bearing
+            };
+        }
+
+        function closestRouteProgress(measure, point) {
+            if (!measure || !measure.segments || !measure.segments.length || !validRoutePoint(point))
+                return null;
+
+            let best = null;
+            let bestDistance = Infinity;
+
+            for (let i = 0; i < measure.segments.length; ++i) {
+                const segment = measure.segments[i];
+                const from = segment.from;
+                const to = segment.to;
+                const latScale = Math.cos(((from[1] + to[1] + point[1]) / 3) * Math.PI / 180.0);
+                const dx = (to[0] - from[0]) * latScale;
+                const dy = to[1] - from[1];
+                const px = (point[0] - from[0]) * latScale;
+                const py = point[1] - from[1];
+                const lengthSq = dx * dx + dy * dy;
+                const t = lengthSq > 0 ? Math.max(0, Math.min(1, (px * dx + py * dy) / lengthSq)) : 0;
+                const projected = [
+                    from[0] + (to[0] - from[0]) * t,
+                    from[1] + (to[1] - from[1]) * t
+                ];
+                const distance = routePointDistanceMeters(point, projected);
+
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = {
+                        point: projected,
+                        bearing: segment.bearing,
+                        progressMeters: segment.start + segment.length * t
+                    };
+                }
+            }
+
+            return best;
+        }
+
+        function remainingRouteFeature(measure, distance) {
+            if (!measure || !measure.segments || !measure.segments.length)
+                return EMPTY_ROUTE;
+
+            const sample = pointAtRouteDistance(measure, distance);
+            if (!sample || !validRoutePoint(sample.point))
+                return EMPTY_ROUTE;
+
+            const line = [sample.point];
+            const clamped = Math.max(0, Math.min(measure.total, distance));
+
+            for (let i = 0; i < measure.segments.length; ++i) {
+                const segment = measure.segments[i];
+                if (segment.end <= clamped)
+                    continue;
+
+                const previous = line[line.length - 1];
+                if (!samePoint(previous, segment.to))
+                    line.push(segment.to);
+            }
+
+            return line.length > 1 ? routeFeature(line) : EMPTY_ROUTE;
+        }
+
+        function publishRouteProgress(measure, progressMeters) {
+            const totalMeters = measure && Number.isFinite(measure.total) ? Math.max(0, measure.total) : 0;
+            const clampedProgress = Math.max(0, Math.min(totalMeters, Number.isFinite(progressMeters) ? progressMeters : 0));
+            const remainingMeters = Math.max(0, totalMeters - clampedProgress);
+            const speedMps = driveSpeedMetersPerSecond();
+            const remainingSeconds = speedMps > 0 ? remainingMeters / speedMps : -1;
+            const sample = measure && totalMeters > 0 ? pointAtRouteDistance(measure, clampedProgress) : null;
+            const point = sample && validRoutePoint(sample.point) ? sample.point : null;
+
+            const progressPayload = {
+                progressMeters: clampedProgress,
+                totalMeters: totalMeters,
+                remainingMeters: remainingMeters,
+                remainingSeconds: Number.isFinite(remainingSeconds) ? remainingSeconds : -1,
+                speedKph: driveSpeedKph,
+                currentLatitude: point ? point[1] : Number.NaN,
+                currentLongitude: point ? point[0] : Number.NaN,
+                bearing: sample && Number.isFinite(sample.bearing) ? sample.bearing : Number.NaN
+            };
+            sendRouteProgressToQml(progressPayload, totalMeters > 0 && clampedProgress >= totalMeters - 0.8);
+        }
+
+        function updateRouteProgressVisuals(measure, progressMeters, sample, forceRouteUpdate) {
+            if (!measure || !measure.total) {
+                setGeoJsonSourceData(REMAINING_ROUTE_SOURCE_ID, EMPTY_ROUTE);
+                setGeoJsonSourceData(VEHICLE_MARKER_SOURCE_ID, EMPTY_ROUTE);
+                lastRouteVisualUpdateMs = 0;
+                lastProgressPublishMs = 0;
+                publishRouteProgress(null, 0);
+                return;
+            }
+
+            const clamped = Math.max(0, Math.min(measure.total, progressMeters));
+            const current = sample || pointAtRouteDistance(measure, clamped);
+            setGeoJsonSourceData(VEHICLE_MARKER_SOURCE_ID,
+                                 current ? markerFeature(current.point, current.bearing) : EMPTY_ROUTE);
+
+            const now = performance.now ? performance.now() : Date.now();
+            const shouldUpdateRoute = !!forceRouteUpdate
+                    || lastRouteVisualUpdateMs <= 0
+                    || now - lastRouteVisualUpdateMs >= 120
+                    || clamped >= measure.total - 0.8;
+
+            if (shouldUpdateRoute) {
+                lastRouteVisualUpdateMs = now;
+                setGeoJsonSourceData(REMAINING_ROUTE_SOURCE_ID, remainingRouteFeature(measure, clamped));
+            }
+
+            const shouldPublishProgress = !!forceRouteUpdate
+                    || lastProgressPublishMs <= 0
+                    || now - lastProgressPublishMs >= 180
+                    || clamped >= measure.total - 0.8;
+
+            if (shouldPublishProgress) {
+                lastProgressPublishMs = now;
+                publishRouteProgress(measure, clamped);
+            }
+        }
+
+        function setRoute(route, forceRouteUpdate) {
+            if (!ensureRouteLayers())
                 return;
 
-            source.setData({
-                type: "Feature",
-                geometry: {
-                    type: "LineString",
-                    coordinates: Array.isArray(route) ? route : []
-                },
-                properties: {}
-            });
+            const line = normalizedRoute(route);
+            const routeKey = line.length > 1 ? routeIdentity(line) : "";
+
+            if (line.length <= 1) {
+                appliedRouteKey = "";
+                driveRouteMeasure = null;
+                driveRouteKey = "";
+                driveProgressMeters = 0;
+                driveVisualProgressMeters = 0;
+                driveFilteredSpeedMps = 0;
+                driveCameraBearing = NaN;
+                mirrorLastCameraTime = 0;
+                resetMirrorAnimation();
+                lastRouteVisualUpdateMs = 0;
+                lastProgressPublishMs = 0;
+                setGeoJsonSourceData(ROUTE_SOURCE_ID, EMPTY_ROUTE);
+                updateRouteProgressVisuals(null, 0, null, true);
+                return;
+            }
+
+            if (!forceRouteUpdate && routeKey === appliedRouteKey && driveRouteMeasure && driveRouteKey === routeKey)
+                return;
+
+            const measure = buildRouteMeasure(line);
+            const sameRoute = routeKey === driveRouteKey;
+            const progress = sameRoute && Number.isFinite(driveVisualProgressMeters)
+                    ? driveVisualProgressMeters
+                    : 0;
+            if (!sameRoute) {
+                driveCameraBearing = NaN;
+                mirrorLastCameraTime = 0;
+                resetMirrorAnimation();
+            }
+
+            appliedRouteKey = routeKey;
+            driveRouteKey = routeKey;
+            driveRouteMeasure = measure;
+            driveProgressMeters = Math.max(0, Math.min(measure.total, progress));
+            driveVisualProgressMeters = driveProgressMeters;
+
+            setGeoJsonSourceData(ROUTE_SOURCE_ID, routeFeature(line));
+            updateRouteProgressVisuals(measure,
+                                       driveVisualProgressMeters,
+                                       pointAtRouteDistance(measure, driveVisualProgressMeters),
+                                       true);
+        }
+
+        function driveCameraPayload() {
+            return drivePayload || lastPayload || {};
+        }
+
+        function driveSpeedMetersPerSecond() {
+            return driveSpeedKph > driveStoppedSpeedThresholdKph
+                    ? driveSpeedKph / 3.6
+                    : 0;
+        }
+
+        function smoothedDriveSpeedMetersPerSecond(targetSpeedMps, deltaSeconds) {
+            if (!Number.isFinite(targetSpeedMps) || targetSpeedMps <= 0) {
+                driveFilteredSpeedMps = 0;
+                return 0;
+            }
+
+            if (!Number.isFinite(driveFilteredSpeedMps) || driveFilteredSpeedMps <= 0) {
+                driveFilteredSpeedMps = targetSpeedMps;
+                return driveFilteredSpeedMps;
+            }
+
+            const alpha = smoothingAlpha(deltaSeconds, 0.22);
+            driveFilteredSpeedMps = driveFilteredSpeedMps + (targetSpeedMps - driveFilteredSpeedMps) * alpha;
+            return driveFilteredSpeedMps;
+        }
+
+        function smoothedVisualProgressMeters(targetProgressMeters, deltaSeconds) {
+            if (!driveRouteMeasure || !driveRouteMeasure.total)
+                return 0;
+
+            const target = Math.max(0, Math.min(driveRouteMeasure.total, targetProgressMeters));
+
+            if (!Number.isFinite(driveVisualProgressMeters) || driveVisualProgressMeters <= 0) {
+                driveVisualProgressMeters = target;
+                return driveVisualProgressMeters;
+            }
+
+            if (target < driveVisualProgressMeters) {
+                driveVisualProgressMeters = target;
+                return driveVisualProgressMeters;
+            }
+
+            const maxStep = Math.max(0.08, driveSpeedMetersPerSecond() * Math.max(0.001, deltaSeconds) * 1.45);
+            const alpha = smoothingAlpha(deltaSeconds, 0.16);
+            const desired = driveVisualProgressMeters + (target - driveVisualProgressMeters) * alpha;
+            driveVisualProgressMeters = Math.min(target, Math.min(driveVisualProgressMeters + maxStep, desired));
+            return driveVisualProgressMeters;
+        }
+
+        function smoothDriveBearing(targetBearing, deltaSeconds) {
+            const target = normalizedBearing(targetBearing);
+            if (!Number.isFinite(driveCameraBearing)) {
+                driveCameraBearing = target;
+                return driveCameraBearing;
+            }
+
+            const alpha = smoothingAlpha(deltaSeconds, 0.42);
+            driveCameraBearing = normalizedBearing(driveCameraBearing
+                    + shortestBearingDelta(driveCameraBearing, target) * alpha);
+            return driveCameraBearing;
+        }
+
+        function lookAheadRouteBearing(measure, distance, sample) {
+            if (!measure || !measure.total || !sample)
+                return sample && Number.isFinite(sample.bearing) ? sample.bearing : map.getBearing();
+
+            const speedMps = driveSpeedMetersPerSecond();
+            const lookAheadMeters = Math.max(22, Math.min(72, 24 + speedMps * 1.7));
+            const ahead = pointAtRouteDistance(measure,
+                                               Math.min(measure.total, distance + lookAheadMeters));
+            if (ahead && ahead.point && !samePoint(sample.point, ahead.point)) {
+                const bearing = bearingBetween(sample.point, ahead.point);
+                if (Number.isFinite(bearing))
+                    return bearing;
+            }
+
+            return Number.isFinite(sample.bearing) ? sample.bearing : map.getBearing();
+        }
+
+        function firstPersonZoom(payload, fallbackZoom) {
+            if (payload && Number.isFinite(payload.firstPersonZoom))
+                return Math.max(17.2, Math.min(20.0, payload.firstPersonZoom));
+            if (Number.isFinite(fallbackZoom))
+                return Math.max(17.2, Math.min(20.0, fallbackZoom));
+            return 18.6;
+        }
+
+        function firstPersonPitch(payload, fallbackPitch) {
+            if (payload && Number.isFinite(payload.firstPersonPitch))
+                return Math.max(60.0, Math.min(79.0, payload.firstPersonPitch));
+            if (Number.isFinite(fallbackPitch))
+                return Math.max(60.0, Math.min(79.0, fallbackPitch));
+            return 62;
+        }
+
+        function firstPersonCamera(point, bearing, payload, fallbackZoom, fallbackPitch) {
+            const camera = {
+                center: point,
+                zoom: firstPersonZoom(payload, fallbackZoom),
+                pitch: firstPersonPitch(payload, fallbackPitch),
+                bearing: normalizedBearing(Number.isFinite(bearing) ? bearing : map.getBearing()),
+                essential: true
+            };
+            if (payload && Number.isFinite(payload.firstPersonOffsetY))
+                camera.offset = [0, payload.firstPersonOffsetY];
+            return camera;
+        }
+
+        function cancelDriveFrame() {
+            if (!driveAnimationFrame)
+                return;
+
+            window.cancelAnimationFrame(driveAnimationFrame);
+            driveAnimationFrame = 0;
+        }
+
+        function cancelMirrorFrame() {
+            if (!mirrorAnimationFrame)
+                return;
+
+            window.cancelAnimationFrame(mirrorAnimationFrame);
+            mirrorAnimationFrame = 0;
+        }
+
+        function resetMirrorAnimation() {
+            cancelMirrorFrame();
+            mirrorLastFrameTime = 0;
+            mirrorTargetProgressMeters = 0;
+            mirrorPayload = null;
+            mirrorFallbackZoom = undefined;
+            mirrorFallbackPitch = undefined;
+        }
+
+        function setDriveSpeed(speedKph, stoppedThresholdKph, stopMapMotion) {
+            driveSpeedKph = Number.isFinite(speedKph) ? Math.max(0, speedKph) : 0;
+
+            if (Number.isFinite(stoppedThresholdKph))
+                driveStoppedSpeedThresholdKph = Math.max(0, stoppedThresholdKph);
+
+            if (driveSpeedMetersPerSecond() <= 0) {
+                drivePausedBySpeed = true;
+                driveFilteredSpeedMps = 0;
+                cancelDriveFrame();
+                driveLastFrameTime = 0;
+                suppressCameraLogs(500);
+
+                if (stopMapMotion !== false) {
+                    try {
+                        map.stop();
+                    } catch (e) {
+                        console.warn("HOME_MAP_DRIVE_SPEED_STOP_FAILED", safeStringifyError(e));
+                    }
+                }
+
+                if (driveRouteMeasure && driveRouteMeasure.total) {
+                    const frozen = Number.isFinite(driveVisualProgressMeters)
+                            ? driveVisualProgressMeters
+                            : driveProgressMeters;
+                    driveProgressMeters = Math.max(0, Math.min(driveRouteMeasure.total, frozen));
+                    driveVisualProgressMeters = driveProgressMeters;
+                    updateRouteProgressVisuals(driveRouteMeasure,
+                                               driveVisualProgressMeters,
+                                               pointAtRouteDistance(driveRouteMeasure, driveVisualProgressMeters),
+                                               true);
+                }
+
+                return;
+            }
+
+            drivePausedBySpeed = false;
+            scheduleDriveFrame();
+        }
+
+        function updateDriveTelemetry(payload) {
+            if (!payload) {
+                setDriveSpeed(0, driveStoppedSpeedThresholdKph, true);
+                return;
+            }
+
+            setDriveSpeed(payload.driveSpeedKph,
+                          payload.stoppedSpeedThresholdKph,
+                          true);
+        }
+
+        function renderDrivePosition(payload, fallbackZoom, fallbackPitch, deltaSeconds) {
+            if (!driveRouteMeasure || !driveRouteMeasure.total)
+                return false;
+
+            driveProgressMeters = Math.max(0, Math.min(driveRouteMeasure.total, driveProgressMeters));
+
+            const visualProgress = drivePausedBySpeed || driveSpeedMetersPerSecond() <= 0
+                    ? driveVisualProgressMeters
+                    : smoothedVisualProgressMeters(driveProgressMeters, deltaSeconds || (1 / 60));
+
+            const sample = pointAtRouteDistance(driveRouteMeasure, visualProgress);
+            if (!sample)
+                return false;
+
+            if (drivePausedBySpeed || driveSpeedMetersPerSecond() <= 0) {
+                updateRouteProgressVisuals(driveRouteMeasure, visualProgress, sample, true);
+                return true;
+            }
+
+            const targetBearing = lookAheadRouteBearing(driveRouteMeasure, visualProgress, sample);
+            const cameraBearing = smoothDriveBearing(targetBearing, deltaSeconds || (1 / 60));
+
+            map.jumpTo(firstPersonCamera(sample.point,
+                                         cameraBearing,
+                                         payload || driveCameraPayload(),
+                                         fallbackZoom,
+                                         fallbackPitch));
+
+            updateRouteProgressVisuals(driveRouteMeasure, visualProgress, sample, false);
+            return true;
+        }
+
+        function pauseDriveTelemetryForMirror() {
+            driveSpeedKph = 0;
+            drivePausedBySpeed = true;
+            driveFilteredSpeedMps = 0;
+            driveLastFrameTime = 0;
+            cancelDriveFrame();
+        }
+
+        function mirrorStepTowardTarget(deltaSeconds) {
+            if (!driveRouteMeasure || !driveRouteMeasure.total)
+                return 0;
+
+            const target = Math.max(0, Math.min(driveRouteMeasure.total, mirrorTargetProgressMeters));
+            if (!Number.isFinite(driveVisualProgressMeters)) {
+                driveVisualProgressMeters = target;
+                return 0;
+            }
+
+            const gap = target - driveVisualProgressMeters;
+            if (Math.abs(gap) <= 0.08) {
+                driveVisualProgressMeters = target;
+                return 0;
+            }
+
+            if (gap < -8) {
+                driveVisualProgressMeters = target;
+                return 0;
+            }
+
+            const maxStep = Math.max(0.18, 72 * Math.max(0.001, deltaSeconds));
+            driveVisualProgressMeters += Math.sign(gap) * Math.min(Math.abs(gap), maxStep);
+            return target - driveVisualProgressMeters;
+        }
+
+        function renderMirrorFramePosition(payload, fallbackZoom, fallbackPitch, deltaSeconds) {
+            if (!driveRouteMeasure || !driveRouteMeasure.total || !payload)
+                return false;
+
+            const remainingGap = mirrorStepTowardTarget(deltaSeconds || (1 / 60));
+            const sample = pointAtRouteDistance(driveRouteMeasure, driveVisualProgressMeters);
+            if (!sample)
+                return false;
+
+            const targetBearing = lookAheadRouteBearing(driveRouteMeasure, driveVisualProgressMeters, sample);
+            const cameraBearing = smoothDriveBearing(targetBearing, deltaSeconds || (1 / 60));
+
+            currentMarker = setMarker(currentMarker, null, "#2563eb", false, "dot");
+            updateRouteProgressVisuals(driveRouteMeasure, driveVisualProgressMeters, sample, false);
+            map.jumpTo(firstPersonCamera(sample.point,
+                                         cameraBearing,
+                                         payload,
+                                         fallbackZoom,
+                                         fallbackPitch));
+            scheduleSupplementalRefresh();
+            return Math.abs(remainingGap) > 0.08;
+        }
+
+        function scheduleMirrorFrame() {
+            if (mirrorAnimationFrame)
+                return;
+
+            mirrorAnimationFrame = window.requestAnimationFrame(mirrorFrame);
+        }
+
+        function mirrorFrame(now) {
+            mirrorAnimationFrame = 0;
+            if (!mirrorPayload || !driveRouteMeasure || !driveRouteMeasure.total)
+                return;
+
+            if (!mirrorLastFrameTime)
+                mirrorLastFrameTime = now;
+
+            const deltaSeconds = Math.max(0.001, Math.min(0.075, (now - mirrorLastFrameTime) / 1000.0));
+            mirrorLastFrameTime = now;
+
+            if (renderMirrorFramePosition(mirrorPayload,
+                                          mirrorFallbackZoom,
+                                          mirrorFallbackPitch,
+                                          deltaSeconds))
+                scheduleMirrorFrame();
+            else
+                mirrorLastFrameTime = 0;
+        }
+
+        function renderMirroredRoutePosition(payload, route, fallbackZoom, fallbackPitch) {
+            setRoute(route, false);
+            const currentPoint = pointFeature(payload.current);
+            if (!driveRouteMeasure || !driveRouteMeasure.total || !validRoutePoint(currentPoint))
+                return false;
+
+            const mirror = closestRouteProgress(driveRouteMeasure, currentPoint);
+            if (!mirror)
+                return false;
+
+            driveProgressMeters = Math.max(0, Math.min(driveRouteMeasure.total, mirror.progressMeters));
+            mirrorTargetProgressMeters = driveProgressMeters;
+            mirrorPayload = payload || {};
+            mirrorFallbackZoom = fallbackZoom;
+            mirrorFallbackPitch = fallbackPitch;
+
+            if (!Number.isFinite(driveVisualProgressMeters)
+                    || Math.abs(driveVisualProgressMeters - driveProgressMeters) > 90)
+                driveVisualProgressMeters = driveProgressMeters;
+
+            if (renderMirrorFramePosition(mirrorPayload,
+                                          mirrorFallbackZoom,
+                                          mirrorFallbackPitch,
+                                          1 / 60))
+                scheduleMirrorFrame();
+
+            return true;
+        }
+
+        function driveFrame(now) {
+            driveAnimationFrame = 0;
+
+            if (!driveAnimationActive || !driveRouteMeasure || !driveRouteMeasure.total)
+                return;
+
+            const speedMps = driveSpeedMetersPerSecond();
+            if (speedMps <= 0) {
+                drivePausedBySpeed = true;
+                driveFilteredSpeedMps = 0;
+                driveLastFrameTime = 0;
+                cancelDriveFrame();
+                return;
+            }
+
+            if (!driveLastFrameTime)
+                driveLastFrameTime = now;
+
+            const deltaSeconds = Math.max(0, Math.min(0.075, (now - driveLastFrameTime) / 1000.0));
+            driveLastFrameTime = now;
+
+            const filteredSpeedMps = smoothedDriveSpeedMetersPerSecond(speedMps, deltaSeconds);
+            driveProgressMeters = Math.min(driveRouteMeasure.total,
+                                           driveProgressMeters + filteredSpeedMps * deltaSeconds);
+
+            renderDrivePosition(driveCameraPayload(), undefined, undefined, deltaSeconds);
+
+            if (driveVisualProgressMeters >= driveRouteMeasure.total - 0.25
+                    || driveProgressMeters >= driveRouteMeasure.total) {
+                driveAnimationActive = false;
+                driveLastFrameTime = 0;
+                driveSpeedKph = 0;
+                drivePausedBySpeed = true;
+                driveProgressMeters = driveRouteMeasure.total;
+                driveVisualProgressMeters = driveRouteMeasure.total;
+                updateRouteProgressVisuals(driveRouteMeasure,
+                                           driveRouteMeasure.total,
+                                           pointAtRouteDistance(driveRouteMeasure, driveRouteMeasure.total),
+                                           true);
+                destinationMarker = setMarker(destinationMarker, null, "#2563eb", false, "dot");
+                if (lastPayload)
+                    lastPayload.destination = null;
+                sendCameraToQml();
+                return;
+            }
+
+            driveAnimationFrame = window.requestAnimationFrame(driveFrame);
+        }
+
+        function scheduleDriveFrame() {
+            if (!driveAnimationActive || driveAnimationFrame || drivePausedBySpeed || driveSpeedMetersPerSecond() <= 0)
+                return;
+
+            driveAnimationFrame = window.requestAnimationFrame(driveFrame);
+        }
+
+        function payloadSessionId(payload) {
+            const raw = payload && payload.navigationSessionId;
+            const parsed = Number(raw);
+            return Number.isFinite(parsed) ? Math.floor(parsed) : -1;
+        }
+
+        function acceptPayloadSession(payload) {
+            const sessionId = payloadSessionId(payload);
+            if (sessionId < 0)
+                return true;
+
+            if (sessionId <= clearedNavigationSessionId)
+                return false;
+
+            if (activeNavigationSessionId >= 0 && sessionId < activeNavigationSessionId)
+                return false;
+
+            if (sessionId !== activeNavigationSessionId) {
+                activeNavigationSessionId = sessionId;
+                appliedRouteKey = "";
+                driveRouteKey = "";
+                driveRouteMeasure = null;
+                driveProgressMeters = 0;
+                driveVisualProgressMeters = 0;
+                driveFilteredSpeedMps = 0;
+                driveCameraBearing = NaN;
+                mirrorLastCameraTime = 0;
+                lastRouteVisualUpdateMs = 0;
+                lastProgressPublishMs = 0;
+            }
+
+            return true;
+        }
+
+        function clearNavigationState(sessionId) {
+            const cleared = Number(sessionId);
+            if (Number.isFinite(cleared)) {
+                const clearSessionId = Math.floor(cleared);
+                if (activeNavigationSessionId >= 0 && clearSessionId < activeNavigationSessionId)
+                    return;
+                clearedNavigationSessionId = Math.max(clearedNavigationSessionId, Math.floor(cleared));
+            } else {
+                clearedNavigationSessionId = Math.max(clearedNavigationSessionId, activeNavigationSessionId);
+            }
+
+            activeNavigationSessionId = -1;
+            cancelDriveFrame();
+            resetMirrorAnimation();
+            driveAnimationActive = false;
+            driveLastFrameTime = 0;
+            driveRouteKey = "";
+            appliedRouteKey = "";
+            driveRouteMeasure = null;
+            driveProgressMeters = 0;
+            driveVisualProgressMeters = 0;
+            driveFilteredSpeedMps = 0;
+            drivePayload = null;
+            driveCameraBearing = NaN;
+            mirrorLastCameraTime = 0;
+            drivePausedBySpeed = true;
+            pendingRouteProgressPayload = null;
+            lastRouteVisualUpdateMs = 0;
+            lastProgressPublishMs = 0;
+            window.clearTimeout(routeProgressLogTimer);
+            routeProgressLogTimer = null;
+
+            if (ensureRouteLayers()) {
+                setGeoJsonSourceData(ROUTE_SOURCE_ID, EMPTY_ROUTE);
+                setGeoJsonSourceData(REMAINING_ROUTE_SOURCE_ID, EMPTY_ROUTE);
+                setGeoJsonSourceData(VEHICLE_MARKER_SOURCE_ID, EMPTY_ROUTE);
+            }
+
+            currentMarker = setMarker(currentMarker, null, "#2563eb", false, "dot");
+            destinationMarker = setMarker(destinationMarker, null, "#2563eb", false, "dot");
+            publishRouteProgress(null, 0);
+        }
+
+        function stopDriveAnimation(cancelMapMotion) {
+            cancelDriveFrame();
+            driveAnimationActive = false;
+            driveLastFrameTime = 0;
+            drivePayload = null;
+            driveCameraBearing = NaN;
+
+            if (cancelMapMotion !== false) {
+                try {
+                    map.stop();
+                } catch (e) {
+                    console.warn("HOME_MAP_DRIVE_ANIMATION_STOP_FAILED", safeStringifyError(e));
+                }
+            }
+        }
+
+        function startDriveAnimation(payload, center, fallbackZoom, fallbackPitch) {
+            if (!payload || !payload.driveAnimationEnabled)
+                return false;
+
+            if (!acceptPayloadSession(payload))
+                return false;
+
+            const route = normalizedRoute(payload.route);
+            const measure = buildRouteMeasure(route);
+            if (!measure.segments.length || measure.total <= 0)
+                return false;
+
+            const nextRouteKey = routeIdentity(route);
+            const routeChanged = nextRouteKey !== driveRouteKey;
+
+            cancelDriveFrame();
+            try { map.stop(); } catch (e) {}
+
+            if (routeChanged) {
+                driveRouteKey = nextRouteKey;
+                appliedRouteKey = "";
+                driveProgressMeters = 0;
+                driveVisualProgressMeters = 0;
+                driveFilteredSpeedMps = 0;
+                driveCameraBearing = NaN;
+                lastRouteVisualUpdateMs = 0;
+                lastProgressPublishMs = 0;
+            }
+
+            drivePayload = payload;
+            driveRouteMeasure = measure;
+            driveAnimationActive = true;
+            driveLastFrameTime = 0;
+
+            setRoute(route, routeChanged);
+            updateDriveTelemetry(payload);
+
+            if (drivePausedBySpeed || driveSpeedMetersPerSecond() <= 0) {
+                updateRouteProgressVisuals(driveRouteMeasure,
+                                           driveVisualProgressMeters,
+                                           pointAtRouteDistance(driveRouteMeasure, driveVisualProgressMeters),
+                                           true);
+                return true;
+            }
+
+            renderDrivePosition(payload, fallbackZoom, fallbackPitch, 1 / 60);
+            scheduleDriveFrame();
+
+            return true;
         }
 
         function set3d(enabled) {
@@ -1287,7 +2337,7 @@
             const layers = style && style.layers ? style.layers : [];
             for (let i = 0; i < layers.length; ++i) {
                 const layer = layers[i];
-                if (!layer || layer.type !== "fill-extrusion" || layer.id.indexOf("home-") !== 0)
+                if (!layer || layer.type !== "fill-extrusion")
                     continue;
 
                 try {
@@ -1327,6 +2377,14 @@
             if (!payload)
                 return;
 
+            if (payload.forceRouteReset || payload.clearNavigationState) {
+                clearNavigationState(payload.navigationSessionId);
+                return;
+            }
+
+            if (!acceptPayloadSession(payload))
+                return;
+
             lastPayload = payload;
 
             if (updateProviderConfig(payload))
@@ -1341,11 +2399,12 @@
 
             const enabled3d = payload.enabled3d !== false;
             const routeActive = !!payload.navigationActive;
-            const hasRoute = routeActive
-                    && Array.isArray(payload.route)
-                    && payload.route.length > 1;
+            const route = normalizedRoute(payload.route);
             const hasDestination = !!pointFeature(payload.destination);
+            const hasRoute = route.length > 1 && (routeActive || hasDestination);
             const center = pointFeature(payload.center) || DEFAULT_CENTER;
+            const driveActive = !!payload.driveActive && routeActive;
+            const driveEnabled = !!payload.driveAnimationEnabled;
             const targetPitch = enabled3d
                     ? (Number.isFinite(payload.pitch)
                         ? Math.max(routeActive ? 60 : 44, payload.pitch)
@@ -1357,18 +2416,83 @@
                     : map.getZoom();
 
             ensureRouteLayers();
-            setRoute(payload.route);
-            currentMarker = setMarker(currentMarker,
-                                      payload.current,
-                                      routeActive ? "#7f1018" : "#1a73e8",
-                                      false,
-                                      routeActive ? "alarm" : "dot");
-            destinationMarker = setMarker(destinationMarker,
-                                          payload.destination,
-                                          routeActive ? "#7f1018" : "#ef4444",
+            set3d(enabled3d);
+            if (driveActive && driveEnabled)
+                updateDriveTelemetry(payload);
+            else
+                pauseDriveTelemetryForMirror();
+
+            if (hasRoute && driveActive && driveEnabled) {
+                resetMirrorAnimation();
+                currentMarker = setMarker(currentMarker, null, "#2563eb", false, "dot");
+                destinationMarker = setMarker(destinationMarker,
+                                              payload.destination,
+                                              "#2563eb",
+                                              false,
+                                              hasDestination ? "alarm" : "dot");
+
+                if (drivePausedBySpeed || driveSpeedMetersPerSecond() <= 0) {
+                    setRoute(route, false);
+                    suppressCameraLogs(500);
+                    if (driveRouteMeasure && driveRouteMeasure.total) {
+                        const frozen = Number.isFinite(driveVisualProgressMeters)
+                                ? driveVisualProgressMeters
+                                : driveProgressMeters;
+                        driveProgressMeters = Math.max(0, Math.min(driveRouteMeasure.total, frozen));
+                        driveVisualProgressMeters = driveProgressMeters;
+                        updateRouteProgressVisuals(driveRouteMeasure,
+                                                   driveVisualProgressMeters,
+                                                   pointAtRouteDistance(driveRouteMeasure, driveVisualProgressMeters),
+                                                   true);
+                    }
+                    return;
+                }
+
+                if (payload.startDriveAnimation || !driveAnimationActive) {
+                    if (startDriveAnimation(payload, center, targetZoom, targetPitch))
+                        return;
+                }
+
+                if (driveAnimationActive) {
+                    drivePayload = payload;
+                    renderDrivePosition(payload, targetZoom, targetPitch, 1 / 60);
+                    scheduleDriveFrame();
+                    return;
+                }
+            }
+
+            if (driveAnimationActive)
+                stopDriveAnimation(true);
+
+            if (hasRoute) {
+                destinationMarker = setMarker(destinationMarker,
+                                              payload.destination,
+                                              "#2563eb",
+                                              false,
+                                              hasDestination ? "alarm" : "dot");
+                if (renderMirroredRoutePosition(payload, route, targetZoom, targetPitch))
+                    return;
+
+                setRoute(route, false);
+                if (!driveRouteMeasure || !driveRouteMeasure.total)
+                    setGeoJsonSourceData(VEHICLE_MARKER_SOURCE_ID, EMPTY_ROUTE);
+            } else {
+                setRoute([], true);
+                setGeoJsonSourceData(VEHICLE_MARKER_SOURCE_ID, EMPTY_ROUTE);
+            }
+
+            if (!hasRoute) {
+                currentMarker = setMarker(currentMarker,
+                                          payload.current,
+                                          "#2563eb",
                                           false,
-                                          routeActive ? "alarm" : "dot");
-            console.warn("HOME_MAP_MARKER_MODE", routeActive ? "alarm" : "normal", "routePoints", Array.isArray(payload.route) ? payload.route.length : 0, "destination", hasDestination);
+                                          "dot");
+                destinationMarker = setMarker(destinationMarker,
+                                              payload.destination,
+                                              "#2563eb",
+                                              false,
+                                              routeActive ? "alarm" : "dot");
+            }
 
             map.easeTo({
                 center: center,
@@ -1378,8 +2502,6 @@
                 duration: 120,
                 essential: true
             });
-
-            set3d(enabled3d);
         }
 
         function rebuildStyleLayers() {
@@ -1426,6 +2548,18 @@
         window.homeMiniMap = {
             update: function (payload) {
                 applyPayload(payload);
+            },
+
+            setDriveSpeed: function (speedKph, stoppedThresholdKph) {
+                setDriveSpeed(speedKph, stoppedThresholdKph, true);
+            },
+
+            stopDriveAnimation: function () {
+                stopDriveAnimation(true);
+            },
+
+            clearNavigationState: function (sessionId) {
+                clearNavigationState(sessionId);
             }
         };
     </script>

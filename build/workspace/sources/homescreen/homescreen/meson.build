@@ -23,6 +23,8 @@ dep_qtappfw = [
     dependency('qtappfw-hvac')
 ]
 
+common_theme_inc = include_directories('../../common/theme')
+
 grpcpp_reflection_dep = cpp.find_library('grpc++_reflection')
 protoc = find_program('protoc')
 grpc_cpp = find_program('grpc_cpp_plugin')
@@ -124,6 +126,8 @@ homescreen_src_headers = [
   'src/homescreenhandler.h',
   'src/AglShellGrpcClient.h',
   'src/handlermodel3d.h',
+  'src/shimmerlogoitem.h',
+  '../../common/theme/ThemeSettingsManager.h',
 ]
 
 moc_files = qt.compile_moc(headers: homescreen_src_headers,
@@ -138,10 +142,13 @@ homescreen_src = [
   agl_shell_protocol_c,
   generated_protoc_sources,
   generated_grpc_sources,
-  'src/handlermodel3d.cpp'
+  'src/handlermodel3d.cpp',
+  'src/shimmerlogoitem.cpp',
+  '../../common/theme/ThemeSettingsManager.cpp',
 ]
 
 executable('homescreen', homescreen_src, resource_files, moc_files,
             cpp_args: qt_defines,
+            include_directories: common_theme_inc,
             dependencies : homescreen_dep,
             install: true)

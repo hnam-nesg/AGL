@@ -1,1 +1,8 @@
-oe-local-files/social.desktop
+[Desktop Entry]
+Name=YouTube
+Comment=YouTube Qt WebEngine Application
+Exec=/usr/bin/social
+Icon=social
+Type=Application
+Terminal=false
+Categories=Application;

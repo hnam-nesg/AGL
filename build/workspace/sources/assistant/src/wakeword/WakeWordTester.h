@@ -2,7 +2,6 @@
 
 #include "../audio/AudioInputService.h"
 #include "../asr/asrmanager.h"
-#include "../vad/silero_vad_engine.h"   
 #include "openwakeword/openwakeword_engine.h"
 
 #include <QObject>
@@ -106,11 +105,6 @@ private:
                          bool thinking,
                          double replyProgress);
 
-    void processSpeakingChunk(const std::vector<int16_t>& chunk); // CHANGED
-
-    void resetBargeInDetector();                                  // CHANGED
-    bool detectBargeInSpeech(const std::vector<int16_t>& chunk);  // CHANGED
-
 private:
     Config cfg_;
 
@@ -133,12 +127,6 @@ private:
     QString m_visibleAssistantText;
     bool m_assistantThinking = false;
     bool m_panelActive = false;
-
-    SileroVadEngine bargeInVad_;
-    std::vector<int16_t> bargeInBuffer_;
-    int bargeInSpeechRun_ = 0;
-    int bargeInIgnoreWindows_ = 0;
-    int bargeInTriggerWindows_ = 3;
 
     std::function<void(bool)> playbackStateCallback_;
 };

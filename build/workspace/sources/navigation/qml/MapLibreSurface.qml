@@ -14,6 +14,19 @@ Item {
     property real bearing: 0
     property bool map3dEnabled: true
     property bool followExternalCenter: true
+    property bool navigationActive: false
+    property bool driveSessionActive: navigationActive
+    property real driveSpeedKph: 0
+    property real stoppedSpeedThresholdKph: 0.5
+    property bool driveAnimationEnabled: true
+    property int routeSessionSeed: 0
+    property int navigationSessionId: 0
+    property string driveRouteKey: ""
+    property int driveRouteSessionSeed: -1
+    property real routeProgressMeters: 0
+    property real routeTotalMeters: 0
+    property real routeRemainingMeters: 0
+    property real routeRemainingSeconds: -1
 
     property string rendererUrl: "qrc:/goong-map.html"
     property string goongMapTilesKey: "Xgw2Eiqb38KmKuSsxQFH5c4NtEuORfbAdWfbxXIB"
@@ -27,6 +40,7 @@ Item {
     property var map: mapObject
 
     signal userGestureStarted()
+    signal routeProgressUpdated(var progress)
 
     QtObject {
         id: mapObject
@@ -74,6 +88,47 @@ Item {
         }
 
         return line
+    }
+
+    function routeHasPath() {
+        return routePayload(routePath).length > 1
+    }
+
+    function routeKey(path) {
+        var line = routePayload(path)
+        if (line.length <= 1)
+            return ""
+
+        var first = line[0]
+        var last = line[line.length - 1]
+        return line.length + ":"
+                + first[0].toFixed(6) + "," + first[1].toFixed(6) + ":"
+                + last[0].toFixed(6) + "," + last[1].toFixed(6)
+    }
+
+    function updateDriveSession() {
+        var key = (navigationActive && driveSessionActive) ? routeKey(routePath) : ""
+        if (key.length === 0) {
+            driveRouteKey = ""
+            driveRouteSessionSeed = routeSessionSeed
+            driveSpeedKph = 0
+            routeProgressMeters = 0
+            routeTotalMeters = 0
+            routeRemainingMeters = 0
+            routeRemainingSeconds = -1
+            return
+        }
+
+        if (key !== driveRouteKey || routeSessionSeed !== driveRouteSessionSeed) {
+            driveRouteKey = key
+            driveRouteSessionSeed = routeSessionSeed
+            navigationSessionId += 1
+            driveSpeedKph = 150
+            routeProgressMeters = 0
+            routeTotalMeters = 0
+            routeRemainingMeters = 0
+            routeRemainingSeconds = -1
+        }
     }
 
     function panBy(dx, dy) {
@@ -139,15 +194,52 @@ Item {
         receivingCameraFromWeb = false
     }
 
+    function applyRouteProgress(progress) {
+        if (!progress)
+            return
+
+        if (isFinite(progress.progressMeters))
+            routeProgressMeters = Math.max(0, progress.progressMeters)
+        if (isFinite(progress.totalMeters))
+            routeTotalMeters = Math.max(0, progress.totalMeters)
+        if (isFinite(progress.remainingMeters))
+            routeRemainingMeters = Math.max(0, progress.remainingMeters)
+        if (isFinite(progress.remainingSeconds))
+            routeRemainingSeconds = progress.remainingSeconds
+        else
+            routeRemainingSeconds = -1
+
+        if (routeTotalMeters > 0
+                && (routeRemainingMeters <= 3 || routeProgressMeters >= routeTotalMeters - 1))
+            driveSpeedKph = 0
+
+        routeProgressUpdated(progress)
+    }
+
     function sync() {
         if (!ready)
             return
 
+        updateDriveSession()
+        var routeLine = routePayload(routePath)
+        var canDrive = navigationActive && driveSessionActive && routeLine.length > 1
         var payload = {
             "center": coordPayload(map.center || centerCoordinate),
             "current": coordPayload(currentCoordinate),
             "destination": coordPayload(destinationCoordinate),
-            "route": routePayload(routePath),
+            "route": routeLine,
+            "navigationActive": navigationActive,
+            "driveActive": canDrive,
+            "driveSpeedKph": Math.max(0, driveSpeedKph),
+            "stoppedSpeedThresholdKph": Math.max(0, stoppedSpeedThresholdKph),
+            "driveAnimationEnabled": canDrive && driveAnimationEnabled,
+            "navigationSessionId": navigationSessionId,
+            "routeProgressMeters": Math.max(0, routeProgressMeters),
+            "routeTotalMeters": Math.max(0, routeTotalMeters),
+            "routeRemainingMeters": Math.max(0, routeRemainingMeters),
+            "routeRemainingSeconds": routeRemainingSeconds,
+            "firstPersonZoom": Math.max(17.2, Math.min(20.0, map.zoomLevel)),
+            "firstPersonPitch": Math.max(60.0, Math.min(79.0, map.tilt)),
             "zoom": map.zoomLevel,
             "pitch": map3dEnabled ? map.tilt : 0,
             "bearing": map.bearing,
@@ -160,6 +252,43 @@ Item {
 
         web.runJavaScript("window.navigationMap && window.navigationMap.update("
                           + JSON.stringify(payload) + ");")
+    }
+
+    function pushDriveSpeed() {
+        if (!ready)
+            return
+
+        web.runJavaScript("window.navigationMap && window.navigationMap.setDriveSpeed && window.navigationMap.setDriveSpeed("
+                          + JSON.stringify(Math.max(0, driveSpeedKph)) + ", "
+                          + JSON.stringify(Math.max(0, stoppedSpeedThresholdKph)) + ");")
+    }
+
+    function stopDriveAnimation() {
+        driveSpeedKph = 0
+        routeRemainingSeconds = -1
+
+        if (!ready)
+            return
+
+        web.runJavaScript("window.navigationMap && window.navigationMap.stopDriveAnimation && window.navigationMap.stopDriveAnimation();")
+    }
+
+    function clearNavigationState() {
+        var clearedSessionId = navigationSessionId
+        navigationSessionId += 1
+        driveSpeedKph = 0
+        driveRouteKey = ""
+        routeProgressMeters = 0
+        routeTotalMeters = 0
+        routeRemainingMeters = 0
+        routeRemainingSeconds = -1
+
+        if (!ready)
+            return
+
+        web.runJavaScript("window.navigationMap && window.navigationMap.clearNavigationState && window.navigationMap.clearNavigationState("
+                          + JSON.stringify(clearedSessionId) + ");")
+        scheduleSync()
     }
 
     function resetStyle() {
@@ -184,7 +313,21 @@ Item {
 
     onCurrentCoordinateChanged: scheduleSync()
     onDestinationCoordinateChanged: scheduleSync()
-    onRoutePathChanged: scheduleSync()
+    onRoutePathChanged: {
+        updateDriveSession()
+        scheduleSync()
+    }
+    onNavigationActiveChanged: {
+        updateDriveSession()
+        scheduleSync()
+    }
+    onDriveSessionActiveChanged: {
+        updateDriveSession()
+        scheduleSync()
+    }
+    onRouteSessionSeedChanged: {
+        scheduleSync()
+    }
 
     onZoomLevelChanged: {
         if (map.zoomLevel !== zoomLevel)
@@ -209,6 +352,12 @@ Item {
     onBuildingSourceLayerChanged: scheduleSync()
     onGoongMapTilesKeyChanged: scheduleSync()
     onGoongStyleUrlChanged: scheduleSync()
+    onDriveSpeedKphChanged: {
+        pushDriveSpeed()
+        scheduleSync()
+    }
+    onStoppedSpeedThresholdKphChanged: pushDriveSpeed()
+    onDriveAnimationEnabledChanged: scheduleSync()
 
     Component.onCompleted: {
         if (validCoord(centerCoordinate) && (!validCoord(map.center) || followExternalCenter))
@@ -223,6 +372,7 @@ Item {
         if (isFinite(bearing))
             map.bearing = bearing
 
+        updateDriveSession()
         scheduleSync()
     }
 
@@ -258,6 +408,7 @@ Item {
             if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                 console.warn("MAPLIBRE_WEBENGINE_LOAD_OK")
                 surface.ready = true
+                surface.updateDriveSession()
                 surface.sync()
             } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                 console.warn("MAPLIBRE_WEBENGINE_LOAD_FAILED:",
@@ -273,10 +424,21 @@ Item {
             }
 
             if (String(message).indexOf("MAPLIBRE_CAMERA=") === 0) {
+                var cameraPrefix = "MAPLIBRE_CAMERA="
                 try {
-                    surface.applyWebCamera(JSON.parse(String(message).substring(15)))
+                    surface.applyWebCamera(JSON.parse(String(message).substring(cameraPrefix.length)))
                 } catch (e) {
                     console.warn("MAPLIBRE_CAMERA_PARSE_FAILED:", e)
+                }
+                return
+            }
+
+            var routeProgressPrefix = "MAPLIBRE_ROUTE_PROGRESS="
+            if (String(message).indexOf(routeProgressPrefix) === 0) {
+                try {
+                    surface.applyRouteProgress(JSON.parse(String(message).substring(routeProgressPrefix.length)))
+                } catch (e) {
+                    console.warn("MAPLIBRE_ROUTE_PROGRESS_PARSE_FAILED:", e)
                 }
                 return
             }

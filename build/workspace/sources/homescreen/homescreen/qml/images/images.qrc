@@ -59,5 +59,6 @@
         <file>next.png</file>
         <file>blue.jpg</file>
         <file>music.png</file>
+        <file>logo.png</file>
     </qresource>
 </RCC>

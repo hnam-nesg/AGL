@@ -12,6 +12,7 @@
 
 #include "settings/AssistantUiSettings.h"
 #include "wakeword/WakeWordTester.h"
+#include "ThemeSettingsManager.h"
 
 int main(int argc, char *argv[])
 {
@@ -50,7 +51,7 @@ int main(int argc, char *argv[])
     cfg.format = SND_PCM_FORMAT_S16_LE;
 
     cfg.wakeword_chunk_samples = 1280;
-    cfg.wakeword_threshold = 0.7f;
+    cfg.wakeword_threshold = 0.3f;
     cfg.wakeword_step_frames = 2;
     cfg.wakeword_trigger_level = 2;
     cfg.wakeword_refractory = 20;
@@ -260,6 +261,7 @@ int main(int argc, char *argv[])
 
     auto* wakeword = new WakeWordTest(cfg);
     AssistantUiSettings assistantUiSettings;
+    ThemeSettingsManager themeSettings;
 
     if (!wakeword->initialize()) {
         std::cerr << "[main] WakeWordTest initialize failed\n";
@@ -269,6 +271,7 @@ int main(int argc, char *argv[])
 
     engine.rootContext()->setContextProperty("wakeword", wakeword);
     engine.rootContext()->setContextProperty("assistantUiSettings", &assistantUiSettings);
+    engine.rootContext()->setContextProperty("themeSettings", &themeSettings);
     engine.load(QUrl(QStringLiteral("qrc:/Assistant.qml")));
 
     if (engine.rootObjects().isEmpty()) {

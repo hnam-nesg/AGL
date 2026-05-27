@@ -123,8 +123,15 @@ Item {
         }
     }
 
+    Timer {
+        id: vehicleSignalsStartTimer
+        interval: 1200
+        repeat: false
+        onTriggered: VehicleSignals.connect()
+    }
+
     Component.onCompleted: {
-        VehicleSignals.connect()
+        vehicleSignalsStartTimer.start()
         bottombar.setActiveApp(launcher.current)
     }
 
@@ -193,9 +200,9 @@ Item {
                 function drawGlow(alphaMul, radiusMul) {
                     const r = R * radiusMul
                     const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, r)
-                    g.addColorStop(0.00, `rgba(0, 85, 170, ${0.55*glowStrength*alphaMul})`)
-                    g.addColorStop(0.22, `rgba(0, 55, 120, ${0.35*glowStrength*alphaMul})`)
-                    g.addColorStop(0.55, `rgba(0, 28, 70,  ${0.14*glowStrength*alphaMul})`)
+                    g.addColorStop(0.00, themeSettings.rgba(themeSettings.glowColor0, 0.55*glowStrength*alphaMul))
+                    g.addColorStop(0.22, themeSettings.rgba(themeSettings.glowColor1, 0.35*glowStrength*alphaMul))
+                    g.addColorStop(0.55, themeSettings.rgba(themeSettings.glowColor2, 0.14*glowStrength*alphaMul))
                     g.addColorStop(1.00, "rgba(0, 0, 0, 0)")
                     ctx.fillStyle = g
                     ctx.fillRect(0, 0, w, h)
@@ -238,6 +245,11 @@ Item {
             onWidthChanged: requestPaint()
             onHeightChanged: requestPaint()
             Component.onCompleted: requestPaint()
+
+            Connections {
+                target: themeSettings
+                function onThemeChanged() { blueGlowBg.requestPaint() }
+            }
         }
 
     }
@@ -281,9 +293,9 @@ Item {
                 function drawGlow(alphaMul, radiusMul) {
                     const r = R * radiusMul
                     const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, r)
-                    g.addColorStop(0.00, `rgba(0, 85, 170, ${0.55*glowStrength*alphaMul})`)
-                    g.addColorStop(0.22, `rgba(0, 55, 120, ${0.35*glowStrength*alphaMul})`)
-                    g.addColorStop(0.55, `rgba(0, 28, 70,  ${0.14*glowStrength*alphaMul})`)
+                    g.addColorStop(0.00, themeSettings.rgba(themeSettings.glowColor0, 0.55*glowStrength*alphaMul))
+                    g.addColorStop(0.22, themeSettings.rgba(themeSettings.glowColor1, 0.35*glowStrength*alphaMul))
+                    g.addColorStop(0.55, themeSettings.rgba(themeSettings.glowColor2, 0.14*glowStrength*alphaMul))
                     g.addColorStop(1.00, "rgba(0, 0, 0, 0)")
                     ctx.fillStyle = g
                     ctx.fillRect(0, 0, w, h)
@@ -326,6 +338,11 @@ Item {
             onWidthChanged: requestPaint()
             onHeightChanged: requestPaint()
             Component.onCompleted: requestPaint()
+
+            Connections {
+                target: themeSettings
+                function onThemeChanged() { blueGlowBg1.requestPaint() }
+            }
         }
     }
 

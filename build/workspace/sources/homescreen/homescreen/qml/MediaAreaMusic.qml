@@ -3,7 +3,7 @@ import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
 
 Rectangle{
-    id: player; width: 400; height: 310; color: "#3f6f6f6f"; radius: 10 
+    id: player; width: 400; height: 310; color: themeSettings.panelColor; radius: 10 
 
     property string title: ""
     property string album: ""

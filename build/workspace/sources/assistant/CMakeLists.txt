@@ -120,6 +120,8 @@ add_executable(assistant
     ${CMAKE_CURRENT_SOURCE_DIR}/src/nlu/PhoBertExecutionPolicy.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/llm/LlmQueryService.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/llm/LlmQueryService.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/theme/ThemeSettingsManager.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/theme/ThemeSettingsManager.cpp
 
     ${CMAKE_CURRENT_SOURCE_DIR}/src/services/HvacService.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/services/HvacService.cpp
@@ -143,6 +145,7 @@ qt6_add_shaders(assistant "assistant_shaders"
 )
 
 target_include_directories(assistant PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/theme
     ${QTAPPFW_HVAC_INCLUDE_DIRS}
     ${QTAPPFW_VEHICLE_SIGNALS_INCLUDE_DIRS}
     ${QTAPPFW_APPLAUNCHER_INCLUDE_DIRS}

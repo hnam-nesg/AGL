@@ -13,9 +13,22 @@ Rectangle {
 
     property int headerHeight: Math.round(height * 0.20)
     property date now: new Date()
+    property var routePath: []
+    property string routePathKey: ""
     property int routePointCount: 0
+    property int routeSessionSeed: 0
+    property int routeResetSeed: 0
+    property bool routeVisible: navigationActive && !routeArrived && routePointCount > 1
+    property bool localRouteArrived: false
+    property bool deferredContentActive: true
+    property bool uiReady: mapLoader.status === Loader.Error
+                           || (mapLoader.status === Loader.Ready
+                               && mapLoader.item
+                               && mapLoader.item.loadComplete)
     property var defaultCoord: QtPositioning.coordinate(10.80690, 106.70290)
     property bool navigationActive: homescreenHandler.navigationActive
+    property bool routeArrived: localRouteArrived || navigationActive
+                                && /^0(?:\.0+)?\s*(m|km)?$/i.test(cleanText(homescreenHandler.navigationDistanceText))
     property var currentCoord: validCoordinate(homescreenHandler.navigationCurrentLatitude,
                                                homescreenHandler.navigationCurrentLongitude)
                                ? QtPositioning.coordinate(homescreenHandler.navigationCurrentLatitude,
@@ -43,6 +56,10 @@ Rectangle {
         running: true
         triggeredOnStart: false
         onTriggered: areaMap.now = new Date()
+    }
+
+    function miniMapItem() {
+        return mapLoader.item
     }
 
     function validCoordinate(latitude, longitude) {
@@ -77,14 +94,16 @@ Rectangle {
     }
 
     function boundedZoom(value) {
-        var minZoom = isFinite(miniMap.minimumZoomLevel) ? miniMap.minimumZoomLevel : 2
-        var maxZoom = isFinite(miniMap.maximumZoomLevel) ? miniMap.maximumZoomLevel : 20
+        var map = miniMapItem()
+        var minZoom = map && isFinite(map.minimumZoomLevel) ? map.minimumZoomLevel : 2
+        var maxZoom = map && isFinite(map.maximumZoomLevel) ? map.maximumZoomLevel : 20
         return Math.max(minZoom, Math.min(maxZoom, value))
     }
 
     function boundedTilt(value) {
-        var minTilt = isFinite(miniMap.minimumTilt) ? miniMap.minimumTilt : 0
-        var maxTilt = isFinite(miniMap.maximumTilt) ? miniMap.maximumTilt : 60
+        var map = miniMapItem()
+        var minTilt = map && isFinite(map.minimumTilt) ? map.minimumTilt : 0
+        var maxTilt = map && isFinite(map.maximumTilt) ? map.maximumTilt : 60
         return Math.max(minTilt, Math.min(maxTilt, value))
     }
 
@@ -161,7 +180,7 @@ Rectangle {
         var value = cleanText(weather.temperature)
         if (value.length === 0)
             return "--"
-        return /[°CFcf]/.test(value) ? value : value + "°"
+        return /[°CFcf]/.test(value) ? value : (value - 32 )/1.8 +  "°C"
     }
 
     function weatherConditionText() {
@@ -197,6 +216,19 @@ Rectangle {
         return value.length > 0 ? value : qsTr("-- km")
     }
 
+    function routeIdentity(path) {
+        if (!path || path.length < 2)
+            return ""
+
+        var first = path[0]
+        var middle = path[Math.floor(path.length / 2)]
+        var last = path[path.length - 1]
+        return path.length + ":"
+                + Number(first.latitude).toFixed(6) + "," + Number(first.longitude).toFixed(6) + ":"
+                + Number(middle.latitude).toFixed(6) + "," + Number(middle.longitude).toFixed(6) + ":"
+                + Number(last.latitude).toFixed(6) + "," + Number(last.longitude).toFixed(6)
+    }
+
     function rebuildRoutePath() {
         var path = []
         var source = homescreenHandler.navigationRoutePath
@@ -206,24 +238,68 @@ Rectangle {
                 path.push(coord)
         }
 
+        var nextRouteKey = routeIdentity(path)
+        var newRoute = nextRouteKey.length > 0
+                && (nextRouteKey !== areaMap.routePathKey
+                    || areaMap.routePointCount === 0
+                    || areaMap.localRouteArrived)
+        if (newRoute) {
+            areaMap.localRouteArrived = false
+            areaMap.routeSessionSeed += 1
+            areaMap.routePathKey = nextRouteKey
+        }
+
+        if (!areaMap.navigationActive || nextRouteKey.length === 0) {
+            clearRoutePath(false, false)
+            return
+        }
+
+        if (areaMap.routeArrived) {
+            clearRoutePath(true, false)
+            return
+        }
+
+        areaMap.routePath = path
         areaMap.routePointCount = path.length
-        miniMap.routePath = path
+        refreshCamera()
+    }
+
+    function clearRoutePath(keepArrived, forceRendererReset) {
+        var arrived = !!keepArrived
+        var preservedRouteKey = arrived ? areaMap.routePathKey : ""
+        var alreadyClear = areaMap.routePointCount === 0
+                && (!areaMap.routePath || areaMap.routePath.length === 0)
+                && areaMap.localRouteArrived === arrived
+                && (arrived || areaMap.routePathKey.length === 0)
+
+        areaMap.routePath = []
+        areaMap.routePointCount = 0
+        areaMap.routePathKey = preservedRouteKey
+        areaMap.localRouteArrived = arrived
+
+        if (!alreadyClear || forceRendererReset)
+            areaMap.routeResetSeed += 1
+
         refreshCamera()
     }
 
     function refreshCamera() {
-        if (navigationActive && routePointCount > 1) {
-            miniMap.bearing = normalizedBearing(homescreenHandler.navigationHeading)
-            miniMap.tilt = boundedTilt(62)
-            miniMap.zoomLevel = boundedZoom(18.6)
-            miniMap.center = guidanceCenter()
+        var map = miniMapItem()
+        if (!map)
+            return
+
+        if (routeVisible) {
+            map.bearing = normalizedBearing(homescreenHandler.navigationHeading)
+            map.tilt = boundedTilt(62)
+            map.zoomLevel = boundedZoom(18.6)
+            map.center = guidanceCenter()
             return
         }
 
-        miniMap.bearing = 0
-        miniMap.tilt = boundedTilt(48)
-        miniMap.zoomLevel = boundedZoom(13.2)
-        miniMap.center = currentCoord
+        map.bearing = 0
+        map.tilt = boundedTilt(58)
+        map.zoomLevel = boundedZoom(16.2)
+        map.center = currentCoord
     }
 
     Rectangle {
@@ -394,22 +470,44 @@ Rectangle {
             color: "#050c14"
         }
 
-        HomeMap3DSurface {
-            id: miniMap
+        Loader {
+            id: mapLoader
             anchors.fill: parent
-            center: areaMap.currentCoord
-            zoomLevel: 15.2
-            tilt: 38
-            currentCoordinate: areaMap.currentCoord
-            destinationCoordinate: areaMap.navigationActive ? areaMap.destinationCoord : null
-            navigationActive: areaMap.navigationActive
-            map3dEnabled: true
-            goongMapTilesKey: homescreenHandler.goongMapTilesKey.length > 0
-                               ? homescreenHandler.goongMapTilesKey
-                               : fallbackGoongMapTilesKey
-            goongStyleUrl: homescreenHandler.goongStyleUrl.length > 0
-                           ? homescreenHandler.goongStyleUrl
-                           : "https://tiles.goong.io/assets/goong_map_web.json"
+            active: areaMap.deferredContentActive
+            asynchronous: true
+            sourceComponent: mapComponent
+
+            onLoaded: areaMap.rebuildRoutePath()
+        }
+
+        Component {
+            id: mapComponent
+
+            HomeMap3DSurface {
+                id: miniMap
+                anchors.fill: parent
+                center: areaMap.currentCoord
+                zoomLevel: 16.2
+                tilt: 58
+                firstPersonOffsetY: 64
+                currentCoordinate: areaMap.currentCoord
+                destinationCoordinate: areaMap.routeVisible ? areaMap.destinationCoord : null
+                routePath: areaMap.routeVisible ? areaMap.routePath : []
+                routeSessionSeed: areaMap.routeSessionSeed
+                routeResetSeed: areaMap.routeResetSeed
+                navigationActive: areaMap.routeVisible
+                driveSessionActive: true//areaMap.routeVisible
+                map3dEnabled: true
+                onDriveArrived: function(progress) {
+                    areaMap.clearRoutePath(true, true)
+                }
+                goongMapTilesKey: homescreenHandler.goongMapTilesKey.length > 0
+                                   ? homescreenHandler.goongMapTilesKey
+                                   : fallbackGoongMapTilesKey
+                goongStyleUrl: homescreenHandler.goongStyleUrl.length > 0
+                               ? homescreenHandler.goongStyleUrl
+                               : "https://tiles.goong.io/assets/goong_map_web.json"
+            }
         }
 
         Rectangle {
@@ -441,7 +539,7 @@ Rectangle {
             width: parent.width - 32
             height: 76
             radius: 18
-            visible: areaMap.navigationActive
+            visible: areaMap.routeVisible
             color: "#f4f8ff"
             border.width: 1
             border.color: "#d6e4f7"

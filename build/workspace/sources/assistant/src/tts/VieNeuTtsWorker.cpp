@@ -441,12 +441,18 @@ bool VieNeuTtsWorker::playPcm16WithAlsaAndMeter(const std::vector<int16_t>& samp
             }
         }
 
-        if (ok && playbackProgressCallback_) {
-            playbackProgressCallback_(1.0);
+        if (!stop_requested_.load() && ok) {
+            rc = snd_pcm_drain(handle);
+            if (rc < 0) {
+                std::cerr << "[VieNeuTTS] snd_pcm_drain failed: "
+                          << snd_strerror(rc)
+                          << "\n";
+                ok = false;
+            }
         }
 
-        if (!stop_requested_.load() && ok) {
-            snd_pcm_drain(handle);
+        if (!stop_requested_.load() && ok && playbackProgressCallback_) {
+            playbackProgressCallback_(1.0);
         }
     } while (false);
 

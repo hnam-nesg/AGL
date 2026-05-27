@@ -8,10 +8,51 @@ Item {
     id: root
     x: 80; y: 50; width: 1200; height: 670
 
+    property bool deferredContentActive: false
+    property bool car3dActive: false
+    property bool car3dReady: false
+    property bool car3dLoadComplete: car3dReady || car3DLoader.status === Loader.Error
+    property bool uiReady: car3dLoadComplete && areaMap.uiReady
+
+    onDeferredContentActiveChanged: {
+        if (deferredContentActive)
+            car3DStartTimer.start()
+    }
+
+    Component.onCompleted: {
+        if (deferredContentActive)
+            car3DStartTimer.start()
+    }
+
+    function setCarDoorRotation(doorName, angle) {
+        var carView = car3DLoader.item
+        if (!carView || !carView[doorName])
+            return
+
+        carView[doorName].eulerRotation.z = angle
+    }
+
     FontLoader{
         id: fontLoader
         source: "images/Roboto-BoldCondensed.ttf"
     }
+
+    Timer {
+        id: car3DStartTimer
+        interval: 250
+        running: false
+        repeat: false
+        onTriggered: root.car3dActive = true
+    }
+
+    Timer {
+        id: car3DReadyTimer
+        interval: 250
+        running: false
+        repeat: false
+        onTriggered: root.car3dReady = true
+    }
+
     Rectangle {
         id: stateCar
         width: 350; height: 670; color: "transparent"
@@ -24,18 +65,45 @@ Item {
                 Image{
                     anchors.fill: parent; source: "images/mercedes_normal.png"
                 }
-                View3D {
-                    anchors.fill: parent
-                    environment: SceneEnvironment {
-                        backgroundMode: SceneEnvironment.Transparent
-                        clearColor: "transparent"
-                        lightProbe: Texture {
-                            source: "images/qwantani_mid_morning_puresky_1k.hdr"
-                        }
-                        antialiasingMode: SceneEnvironment.MSAA
-                    }
 
-                    Mercedes {id: mercedes; scale: Qt.vector3d(1, 1, 1) }
+                Loader {
+                    id: car3DLoader
+                    anchors.fill: parent
+                    active: root.car3dActive
+                    asynchronous: true
+                    sourceComponent: car3DComponent
+
+                    onLoaded: {
+                        root.setCarDoorRotation("doorRL", button_RL.checked ? -45 : 0)
+                        root.setCarDoorRotation("doorFL", button_FL.checked ? -45 : 0)
+                        root.setCarDoorRotation("doorFR", button_FR.checked ? 45 : 0)
+                        root.setCarDoorRotation("doorRR", button_RR.checked ? 45 : 0)
+                        car3DReadyTimer.start()
+                    }
+                }
+
+                Component {
+                    id: car3DComponent
+
+                    View3D {
+                        anchors.fill: parent
+
+                        property alias doorFL: mercedes.doorFL
+                        property alias doorFR: mercedes.doorFR
+                        property alias doorRL: mercedes.doorRL
+                        property alias doorRR: mercedes.doorRR
+
+                        environment: SceneEnvironment {
+                            backgroundMode: SceneEnvironment.Transparent
+                            clearColor: "transparent"
+                            lightProbe: Texture {
+                                source: "images/qwantani_mid_morning_puresky_1k.hdr"
+                            }
+                            antialiasingMode: SceneEnvironment.MSAA
+                        }
+
+                        Mercedes {id: mercedes; scale: Qt.vector3d(1, 1, 1) }
+                    }
                 }
 
                 LeaderCallout {
@@ -75,28 +143,28 @@ Item {
                     id: button_RL
                     x: checked ? 20 : 90; y: 420; width: checked ? 100 : 50; height: checked ? 50 : 80
                     opacity: 0; checkable: true; enabled: Handler3D.door; rotation: checked ? -45 : 0
-                    onClicked:{mercedes.doorRL.eulerRotation.z = checked ? -45 : 0}
+                    onClicked: root.setCarDoorRotation("doorRL", checked ? -45 : 0)
                 }
 
                 Button {
                     id: button_FL
                     x: checked ? 20 : 90; y: 340; width: checked ? 100 : 50; height: checked ? 50 : 70
                     opacity: 0; checkable: true; enabled: Handler3D.door; rotation: checked ? -45 : 0
-                    onClicked:{mercedes.doorFL.eulerRotation.z = checked ? -45 : 0}
+                    onClicked: root.setCarDoorRotation("doorFL", checked ? -45 : 0)
                 }
 
                 Button {
                     id: button_FR
                     x: checked ? 215 : 210; y: 340; width: checked ? 100 : 50; height: checked ? 50 : 70
                     opacity: 0; checkable: true; enabled: Handler3D.door; rotation: checked ? -315 : 0
-                    onClicked:{mercedes.doorFR.eulerRotation.z = checked ? 45 : 0}
+                    onClicked: root.setCarDoorRotation("doorFR", checked ? 45 : 0)
                 }
 
                 Button {
                     id: button_RR
                     x: checked ? 215 : 210; y: 420; width: checked ? 100 : 50; height: checked ? 50 : 80
                     opacity: 0; checkable: true; enabled: Handler3D.door; rotation: checked ? -315 : 0
-                    onClicked:{mercedes.doorRR.eulerRotation.z = checked ? 45 : 0}
+                    onClicked: root.setCarDoorRotation("doorRR", checked ? 45 : 0)
                 }
             }
 
@@ -245,6 +313,9 @@ Item {
     Row{
         width: 850; height: 640; anchors.left: stateCar.right; anchors.verticalCenter: parent.verticalCenter; spacing: 10
         AreaMap{
+            id: areaMap
+            deferredContentActive: root.deferredContentActive
+
             MouseArea{
                     anchors.fill: parent
                     onClicked:{homescreenHandler.tapShortcut("navigation")}

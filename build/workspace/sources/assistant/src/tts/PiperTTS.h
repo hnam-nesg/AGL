@@ -51,6 +51,7 @@ public:
 
     void setAudioLevelCallback(std::function<void(double)> callback);
     void setPlaybackStateCallback(std::function<void(bool)> callback);
+    void setPlaybackProgressCallback(std::function<void(double)> callback);
     void setRuntimeOptions(float playbackSpeed,
                            float playbackVolume,
                            const std::string& /*voice*/);
@@ -71,6 +72,7 @@ private:
     static std::string shellQuoteEnvValue(const std::string& input);
 
     static bool loadWavPcm16(const std::string& path, WavInfo* out);
+    static bool saveWavPcm16(const std::string& path, const WavInfo& wav);
     static AudioLevelInfo analyzeAudioLevel(const int16_t* data, size_t sampleCount);
 
     bool playWavWithAlsaAndMeter(const std::string& wavPath);
@@ -81,6 +83,7 @@ private:
 
     std::function<void(double)> audioLevelCallback_;
     std::function<void(bool)> playbackStateCallback_;
+    std::function<void(double)> playbackProgressCallback_;
 
     std::atomic<bool> stop_requested_{false};
     std::atomic<bool> speaking_{false};

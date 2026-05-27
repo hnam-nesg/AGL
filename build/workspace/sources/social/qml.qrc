@@ -1,1 +1,9 @@
-oe-local-files/qml.qrc
+<RCC>
+    <qresource prefix="/">
+        <file>Social.qml</file>
+        <file>HL_Button.qml</file>
+        <file>Background.qml</file>
+        <file>BorderColor.qml</file>
+        <file>ButtonControl.qml</file>
+    </qresource>
+</RCC>

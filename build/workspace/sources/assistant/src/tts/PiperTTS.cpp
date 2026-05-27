@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cctype>
 #include <cmath>
 #include <csignal>
 #include <cstdlib>
@@ -17,6 +18,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <utility>
 
 namespace fs = std::filesystem;
 
@@ -59,6 +61,233 @@ struct SpeakingGuard {
         }
     }
 };
+
+std::string trimChunk(std::string text)
+{
+    while (!text.empty() &&
+           std::isspace(static_cast<unsigned char>(text.front()))) {
+        text.erase(text.begin());
+    }
+    while (!text.empty() &&
+           std::isspace(static_cast<unsigned char>(text.back()))) {
+        text.pop_back();
+    }
+    return text;
+}
+
+bool isSentenceBoundary(char c)
+{
+    return c == '.' || c == '?' || c == '!';
+}
+
+bool isSoftBoundary(char c)
+{
+    return c == ',' || c == ';' || c == ':';
+}
+
+bool isClosingPunctuation(char c)
+{
+    return c == '"' || c == '\'' || c == ')' || c == ']';
+}
+
+bool isBoundaryFollowedBySpaceOrEnd(const std::string& text, size_t index)
+{
+    size_t next = index + 1;
+    while (next < text.size() && isClosingPunctuation(text[next])) {
+        ++next;
+    }
+    return next >= text.size() ||
+           std::isspace(static_cast<unsigned char>(text[next])) != 0;
+}
+
+size_t naturalBoundaryEnd(const std::string& text, size_t index)
+{
+    size_t end = index + 1;
+    while (end < text.size()) {
+        const char c = text[end];
+        if (isSentenceBoundary(c) || isClosingPunctuation(c)) {
+            ++end;
+            continue;
+        }
+        break;
+    }
+    return end;
+}
+
+bool naturalBoundaryAt(const std::string& text, size_t index, bool* hard)
+{
+    const char c = text[index];
+    if (c == '\n') {
+        if (hard) *hard = true;
+        return true;
+    }
+
+    if (!isSentenceBoundary(c) && !isSoftBoundary(c)) {
+        return false;
+    }
+
+    if (!isBoundaryFollowedBySpaceOrEnd(text, index)) {
+        return false;
+    }
+
+    if (hard) *hard = isSentenceBoundary(c);
+    return true;
+}
+
+size_t findSplitBefore(const std::string& text, size_t limit, size_t minPos)
+{
+    const size_t capped = std::min(limit, text.size());
+    for (size_t i = capped; i > minPos; --i) {
+        if (isSentenceBoundary(text[i - 1]) ||
+            isSoftBoundary(text[i - 1]) ||
+            std::isspace(static_cast<unsigned char>(text[i - 1])) != 0) {
+            return i;
+        }
+    }
+    return capped;
+}
+
+size_t findNaturalSplit(const std::string& text,
+                        size_t pos,
+                        size_t naturalMinChars,
+                        size_t targetChars,
+                        size_t maxChars)
+{
+    const size_t remaining = text.size() - pos;
+    const size_t maxEnd = std::min(text.size(), pos + maxChars);
+    const bool tailFits = remaining <= maxChars;
+    size_t softCandidate = std::string::npos;
+
+    for (size_t i = pos; i < maxEnd; ++i) {
+        bool hard = false;
+        if (!naturalBoundaryAt(text, i, &hard)) {
+            continue;
+        }
+
+        const size_t end = std::min(naturalBoundaryEnd(text, i), maxEnd);
+        const std::string candidate = trimChunk(text.substr(pos, end - pos));
+        if (candidate.empty()) {
+            continue;
+        }
+
+        const size_t len = candidate.size();
+        const size_t restLen = trimChunk(text.substr(end)).size();
+
+        if (hard) {
+            if (len >= 8 || restLen == 0) {
+                return end;
+            }
+            continue;
+        }
+
+        if (len >= naturalMinChars && restLen >= 8) {
+            if (softCandidate == std::string::npos) {
+                softCandidate = end;
+            }
+            if (len >= std::max<size_t>(naturalMinChars, targetChars / 2)) {
+                return end;
+            }
+        }
+    }
+
+    if (softCandidate != std::string::npos && tailFits) {
+        return softCandidate;
+    }
+
+    if (tailFits) {
+        return text.size();
+    }
+
+    if (softCandidate != std::string::npos) {
+        return softCandidate;
+    }
+
+    size_t split = findSplitBefore(text.substr(pos, maxChars),
+                                   targetChars,
+                                   naturalMinChars);
+    if (split == 0) {
+        split = std::min(maxChars, remaining);
+    }
+    return pos + split;
+}
+
+std::vector<std::string> splitTextForPacing(const std::string& text)
+{
+    constexpr size_t naturalMinChars = 18;
+    constexpr size_t targetChars = 110;
+    constexpr size_t maxChars = 180;
+
+    std::vector<std::string> chunks;
+    chunks.reserve(std::max<size_t>(1, text.size() / targetChars + 1));
+
+    for (size_t pos = 0; pos < text.size();) {
+        while (pos < text.size() &&
+               std::isspace(static_cast<unsigned char>(text[pos])) != 0) {
+            ++pos;
+        }
+        if (pos >= text.size()) {
+            break;
+        }
+
+        const size_t splitEnd = findNaturalSplit(text,
+                                                 pos,
+                                                 naturalMinChars,
+                                                 targetChars,
+                                                 maxChars);
+        const size_t split = std::max<size_t>(1, splitEnd - pos);
+        std::string chunk = trimChunk(text.substr(pos, split));
+        if (!chunk.empty()) {
+            chunks.push_back(std::move(chunk));
+        }
+        pos += split;
+    }
+
+    if (chunks.empty()) {
+        const std::string chunk = trimChunk(text);
+        if (!chunk.empty()) {
+            chunks.push_back(chunk);
+        }
+    }
+
+    return chunks;
+}
+
+char lastNonSpaceChar(const std::string& text)
+{
+    for (size_t i = text.size(); i > 0; --i) {
+        const char c = text[i - 1];
+        if (std::isspace(static_cast<unsigned char>(c)) == 0) {
+            return c;
+        }
+    }
+    return '\0';
+}
+
+int pauseMsAfterText(const std::string& text)
+{
+    switch (lastNonSpaceChar(text)) {
+    case '?':
+    case '!':
+        return 460;
+    case '.':
+        return 380;
+    case ';':
+    case ':':
+        return 300;
+    case ',':
+        return 190;
+    default:
+        return 120;
+    }
+}
+
+size_t msToInterleavedSamples(int ms, uint32_t sampleRate, uint16_t channels)
+{
+    const size_t frames = static_cast<size_t>(
+        (static_cast<uint64_t>(std::max(0, ms)) *
+         static_cast<uint64_t>(std::max<uint32_t>(1, sampleRate))) / 1000u);
+    return frames * std::max<uint16_t>(1, channels);
+}
 } // namespace
 
 PiperTTS::PiperTTS(const Config& cfg)
@@ -112,6 +341,11 @@ void PiperTTS::setPlaybackStateCallback(std::function<void(bool)> callback)
     playbackStateCallback_ = std::move(callback);
 }
 
+void PiperTTS::setPlaybackProgressCallback(std::function<void(double)> callback)
+{
+    playbackProgressCallback_ = std::move(callback);
+}
+
 void PiperTTS::setRuntimeOptions(float playbackSpeed,
                                  float playbackVolume,
                                  const std::string& /*voice*/)
@@ -161,6 +395,7 @@ std::string PiperTTS::shellQuoteEnvValue(const std::string& input)
 
 void PiperTTS::stop()
 {
+    const bool wasSpeaking = speaking_.load();
     stop_requested_.store(true);
 
     int pid = -1;
@@ -177,7 +412,7 @@ void PiperTTS::stop()
         audioLevelCallback_(0.0);
     }
 
-    if (playbackStateCallback_) {
+    if (wasSpeaking && playbackStateCallback_) {
         playbackStateCallback_(false);
     }
 }
@@ -319,6 +554,61 @@ bool PiperTTS::loadWavPcm16(const std::string& path, WavInfo* out)
     in.read(reinterpret_cast<char*>(out->samples.data()), dataSize);
     if (!in) {
         std::cerr << "[PiperTTS] Failed to read WAV PCM data\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool PiperTTS::saveWavPcm16(const std::string& path, const WavInfo& wav)
+{
+    if (wav.sampleRate == 0 || wav.channels == 0 || wav.bitsPerSample != 16) {
+        std::cerr << "[PiperTTS] Cannot save invalid WAV metadata\n";
+        return false;
+    }
+
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        std::cerr << "[PiperTTS] Cannot open WAV for write: "
+                  << path
+                  << "\n";
+        return false;
+    }
+
+    const uint32_t dataBytes =
+        static_cast<uint32_t>(wav.samples.size() * sizeof(int16_t));
+    const uint32_t riffChunkSize = 36 + dataBytes;
+    const uint32_t fmtChunkSize = 16;
+    const uint16_t audioFormat = 1;
+    const uint16_t channels = wav.channels;
+    const uint32_t sampleRate = wav.sampleRate;
+    const uint16_t bitsPerSample = 16;
+    const uint16_t blockAlign = channels * bitsPerSample / 8;
+    const uint32_t byteRate = sampleRate * blockAlign;
+
+    out.write("RIFF", 4);
+    out.write(reinterpret_cast<const char*>(&riffChunkSize), 4);
+    out.write("WAVE", 4);
+    out.write("fmt ", 4);
+    out.write(reinterpret_cast<const char*>(&fmtChunkSize), 4);
+    out.write(reinterpret_cast<const char*>(&audioFormat), 2);
+    out.write(reinterpret_cast<const char*>(&channels), 2);
+    out.write(reinterpret_cast<const char*>(&sampleRate), 4);
+    out.write(reinterpret_cast<const char*>(&byteRate), 4);
+    out.write(reinterpret_cast<const char*>(&blockAlign), 2);
+    out.write(reinterpret_cast<const char*>(&bitsPerSample), 2);
+    out.write("data", 4);
+    out.write(reinterpret_cast<const char*>(&dataBytes), 4);
+
+    if (!wav.samples.empty()) {
+        out.write(reinterpret_cast<const char*>(wav.samples.data()),
+                  static_cast<std::streamsize>(dataBytes));
+    }
+
+    if (!out) {
+        std::cerr << "[PiperTTS] Failed to write WAV: "
+                  << path
+                  << "\n";
         return false;
     }
 
@@ -513,6 +803,13 @@ bool PiperTTS::playWavWithAlsaAndMeter(const std::string& wavPath)
             if (audioLevelCallback_) {
                 audioLevelCallback_(std::clamp(info.rmsNormalized, 0.0, 1.0));
             }
+            if (playbackProgressCallback_) {
+                playbackProgressCallback_(
+                    std::clamp(static_cast<double>(pos) /
+                               static_cast<double>(std::max<size_t>(1, wav.samples.size())),
+                               0.0,
+                               1.0));
+            }
 
             const int16_t* ptr = wav.samples.data() + pos;
             size_t framesRemaining = framesThisChunk;
@@ -552,7 +849,17 @@ bool PiperTTS::playWavWithAlsaAndMeter(const std::string& wavPath)
         }
 
         if (!stop_requested_.load() && ok) {
-            snd_pcm_drain(handle);
+            rc = snd_pcm_drain(handle);
+            if (rc < 0) {
+                std::cerr << "[PiperTTS] snd_pcm_drain failed: "
+                          << snd_strerror(rc)
+                          << "\n";
+                ok = false;
+            }
+        }
+
+        if (!stop_requested_.load() && ok && playbackProgressCallback_) {
+            playbackProgressCallback_(1.0);
         }
     } while (false);
 
@@ -597,7 +904,91 @@ bool PiperTTS::speak(const std::string& text)
         ? "/tmp/piper_tts.wav"
         : cfg_.output_wav_path;
 
-    if (!synthesizeToFile(text, wavPath)) {
+    const std::vector<std::string> chunks = splitTextForPacing(text);
+    if (chunks.empty()) {
+        std::cerr << "[PiperTTS] Empty text after chunking\n";
+        return false;
+    }
+
+    std::cout << "[PiperTTS] synthesis chunks=" << chunks.size() << "\n";
+
+    if (chunks.size() == 1) {
+        if (!synthesizeToFile(chunks.front(), wavPath)) {
+            return false;
+        }
+
+        if (stop_requested_.load()) {
+            return false;
+        }
+
+        return playWavWithAlsaAndMeter(wavPath);
+    }
+
+    WavInfo combined;
+    combined.bitsPerSample = 16;
+
+    for (size_t i = 0; i < chunks.size(); ++i) {
+        if (stop_requested_.load()) {
+            return false;
+        }
+
+        const std::string chunkPath =
+            wavPath + ".chunk" + std::to_string(i + 1) + ".wav";
+
+        if (!synthesizeToFile(chunks[i], chunkPath)) {
+            return false;
+        }
+
+        if (stop_requested_.load()) {
+            return false;
+        }
+
+        WavInfo part;
+        if (!loadWavPcm16(chunkPath, &part)) {
+            return false;
+        }
+        fs::remove(chunkPath);
+
+        if (part.samples.empty()) {
+            std::cerr << "[PiperTTS] Empty PCM chunk "
+                      << (i + 1)
+                      << "/"
+                      << chunks.size()
+                      << "\n";
+            return false;
+        }
+
+        if (combined.samples.empty()) {
+            combined.sampleRate = part.sampleRate;
+            combined.channels = part.channels;
+            combined.bitsPerSample = part.bitsPerSample;
+        } else if (part.sampleRate != combined.sampleRate ||
+                   part.channels != combined.channels ||
+                   part.bitsPerSample != combined.bitsPerSample) {
+            std::cerr << "[PiperTTS] Chunk WAV format mismatch\n";
+            return false;
+        }
+
+        const int pauseMs = i > 0 ? pauseMsAfterText(chunks[i - 1]) : 0;
+        const size_t silenceSamples = msToInterleavedSamples(
+            pauseMs,
+            combined.sampleRate,
+            combined.channels);
+        if (!combined.samples.empty() && silenceSamples > 0) {
+            combined.samples.insert(combined.samples.end(), silenceSamples, 0);
+        }
+
+        combined.samples.insert(combined.samples.end(),
+                                part.samples.begin(),
+                                part.samples.end());
+    }
+
+    if (combined.samples.empty()) {
+        std::cerr << "[PiperTTS] Empty combined PCM\n";
+        return false;
+    }
+
+    if (!saveWavPcm16(wavPath, combined)) {
         return false;
     }
 
