@@ -32,6 +32,3 @@ $ lsblk
 $ sudo umount /dev/sdX*
 $ sudo bmaptool copy agl-ivi-demo-qt-raspberrypi5.rootfs.wic.xz /dev/sdX
 ```
-    F --> I[Response Text]
-    I --> J[Piper / VieNeu TTS]
-    J --> K[Speaker Output]
