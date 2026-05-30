@@ -36,22 +36,22 @@ $ sudo bmaptool copy agl-ivi-demo-qt-raspberrypi5.rootfs.wic.xz /dev/sdX
 %%{init: {
   "flowchart": {
     "htmlLabels": true,
-    "nodeSpacing": 60,
-    "rankSpacing": 70,
+    "nodeSpacing": 45,
+    "rankSpacing": 55,
     "curve": "basis"
   },
   "themeVariables": {
-    "fontSize": "18px",
+    "fontSize": "15px",
     "fontFamily": "Arial"
   }
 }}%%
 
 flowchart LR
-    AGL["<b style='font-size:26px'>AGL</b><br/><span style='font-size:17px'>Automotive Grade Linux</span>"]
+    AGL["<b style='font-size:22px'>AGL</b><br/><span style='font-size:14px'>Automotive Grade Linux</span>"]
 
-    AGL --> AI["<b style='font-size:22px'>recipes-ai</b><br/><span style='font-size:16px'>AI / Voice / NLP Layer</span>"]
-    AGL --> APP["<b style='font-size:22px'>recipes-app</b><br/><span style='font-size:16px'>IVI Application Layer</span>"]
-    AGL --> RPI["<b style='font-size:22px'>Raspberry Pi 5</b><br/><span style='font-size:16px'>Main IVI Target</span>"]
+    AGL --> AI["<b style='font-size:18px'>recipes-ai</b><br/><span style='font-size:13px'>AI / Voice / NLP Layer</span>"]
+    AGL --> APP["<b style='font-size:18px'>recipes-app</b><br/><span style='font-size:13px'>IVI Application Layer</span>"]
+    AGL --> RPI["<b style='font-size:18px'>Raspberry Pi 5</b><br/><span style='font-size:13px'>Main IVI Target</span>"]
 
     AI --> LLAMA["llama.cpp<br/>LLM Runtime"]
     AI --> PIPER["piper<br/>Text-to-Speech"]
@@ -72,10 +72,10 @@ flowchart LR
 
     RPI --> MAIN["<b>Main IVI System</b>"]
 
-    classDef root fill:#111827,color:#ffffff,stroke:#000000,stroke-width:3px,font-size:21px;
-    classDef group fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px,font-size:19px;
-    classDef item fill:#e0f2fe,color:#0f172a,stroke:#0284c7,stroke-width:1.5px,font-size:17px;
-    classDef target fill:#16a34a,color:#ffffff,stroke:#166534,stroke-width:2px,font-size:19px;
+    classDef root fill:#111827,color:#ffffff,stroke:#000000,stroke-width:2px,font-size:18px;
+    classDef group fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px,font-size:16px;
+    classDef item fill:#e0f2fe,color:#0f172a,stroke:#0284c7,stroke-width:1px,font-size:14px;
+    classDef target fill:#16a34a,color:#ffffff,stroke:#166534,stroke-width:2px,font-size:16px;
 
     class AGL root;
     class AI,APP group;
