@@ -32,3 +32,23 @@ $ lsblk
 $ sudo umount /dev/sdX*
 $ sudo bmaptool copy agl-ivi-demo-qt-raspberrypi5.rootfs.wic.xz /dev/sdX
 ```
+
+flowchart TD
+    A[Microphone Input] --> B[openWakeWord]
+    B --> C[Sherpa-ONNX / Zipformer-HyNT ASR]
+    C --> D[Text Command]
+
+    D --> E[phoBERT / NLP]
+    E --> F[llama.cpp Local LLM]
+
+    F --> G[Intent Parser]
+
+    G --> H1[Control HVAC]
+    G --> H2[Control Media]
+    G --> H3[Open Navigation]
+    G --> H4[Phone Assistant]
+    G --> H5[Vehicle Settings]
+
+    F --> I[Response Text]
+    I --> J[Piper / VieNeu TTS]
+    J --> K[Speaker Output]
