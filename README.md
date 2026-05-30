@@ -41,7 +41,7 @@ $ sudo bmaptool copy agl-ivi-demo-qt-raspberrypi5.rootfs.wic.xz /dev/sdX
     "curve": "basis"
   },
   "themeVariables": {
-    "fontSize": "22px",
+    "fontSize": "16px",
     "fontFamily": "Arial"
   }
 }}%%
