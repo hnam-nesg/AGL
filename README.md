@@ -36,6 +36,8 @@ $ lsblk
 $ sudo umount /dev/sdX*
 $ sudo bmaptool copy agl-ivi-demo-qt-raspberrypi5.rootfs.wic.xz /dev/sdX
 ```
+<h3 align="center"><strong>System Architecture Diagram</strong></h3>
+
 ```mermaid
 %%{init: {
   "flowchart": {
