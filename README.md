@@ -38,9 +38,10 @@ $ sudo bmaptool copy agl-cluster-demo-qt-raspberrypi5.rootfs.wic.xz /dev/sdX
 ```
 <h3 align="center"><strong>System Architecture Diagram</strong></h3>
 ```mermaid
-flowchart TD
-    AGL["AGL<br/>Automotive Grade Linux"]
 
+    flowchart TD
+    AGL["AGL<br/>Automotive Grade Linux"]
+    
     AGL --> APP["recipes-app"]
     AGL --> RPI["Raspberry Pi 5<br/>(Main)"]
 
