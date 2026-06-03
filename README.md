@@ -33,7 +33,6 @@ $ sudo umount /dev/sdX*
 $ sudo bmaptool copy agl-cluster-demo-qt-raspberrypi5.rootfs.wic.xz /dev/sdX
 ```
 <h3 align="center"><strong>System Architecture Diagram</strong></h3>
-
 ```mermaid
 flowchart TD
     AGL["AGL<br/>Automotive Grade Linux"]
@@ -70,3 +69,6 @@ flowchart TD
     class MEGA,UNO node;
     class CAN1,CAN2,CANBUS can;
 ```
+<h3 align="center"><strong>Click the image to view the demo</strong></h3>
+
+[![VIDEO](https://raw.githubusercontent.com/hnam-nesg/AGL/AGL_IVI/IVI.jpg)](https://www.youtube.com/watch?v=hxWcEkDW7ZM)
