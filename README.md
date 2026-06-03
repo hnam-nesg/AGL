@@ -1,5 +1,9 @@
 # Automotive Grade Linux OS (create IVI)
 
+<h3 align="center"><strong>Click the image to view the demo</strong></h3>
+
+[![VIDEO](https://raw.githubusercontent.com/hnam-nesg/AGL/AGL_IVI/IVI.jpg)](https://www.youtube.com/watch?v=hxWcEkDW7ZM)
+
 **AGL repo source code**
 ```
 
