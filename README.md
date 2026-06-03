@@ -37,8 +37,8 @@ $ sudo umount /dev/sdX*
 $ sudo bmaptool copy agl-cluster-demo-qt-raspberrypi5.rootfs.wic.xz /dev/sdX
 ```
 <h3 align="center"><strong>System Architecture Diagram</strong></h3>
-```mermaid
 
+```mermaid
     flowchart TD
     AGL["AGL<br/>Automotive Grade Linux"]
     
